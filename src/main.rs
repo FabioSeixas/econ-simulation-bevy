@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use bevy::log::*;
 use bevy::prelude::*;
 use rand::Rng;
@@ -10,7 +12,7 @@ fn main() {
         }))
         .add_systems(Startup, setup)
         .add_systems(Update, player_movement)
-        .add_systems(Update, agent_movement)
+        .add_systems(Update, agent_frame)
         .run();
 }
 
@@ -45,14 +47,57 @@ impl AnimationConfig {
 
 #[derive(Component)]
 struct Agent {
-    destination: Option<Vec3>,
+    action_system: ActionSystem,
+    // destination: Option<Vec3>,
 }
 
 impl Agent {
     fn new() -> Self {
         Self {
-            destination: Option::None,
+            // destination: Option::None,
+            action_system: ActionSystem {
+                queue: VecDeque::new(),
+            },
         }
+    }
+
+    fn get_action(&self) -> Option<&Action> {
+        self.action_system.queue.front()
+    }
+
+    fn complete_current_action(&mut self) {
+        self.action_system.queue.pop_front();
+    }
+
+    fn new_action(&mut self) {
+        self.action_system.new_action();
+    }
+}
+
+enum ActionType {
+    WALK(Vec3),
+}
+
+struct Action {
+    _type: ActionType,
+}
+
+struct ActionSystem {
+    queue: VecDeque<Action>,
+}
+
+impl ActionSystem {
+    fn new_action(&mut self) {
+        let mut rnd = rand::thread_rng();
+        let max = 500.;
+
+        self.queue.push_back(Action {
+            _type: ActionType::WALK(Vec3 {
+                x: rnd.gen_range(-max..max),
+                y: rnd.gen_range(-max..max),
+                z: 0.,
+            }),
+        });
     }
 }
 
@@ -103,33 +148,55 @@ fn setup(
     ));
 }
 
-fn agent_movement(
+fn agent_frame(
     mut query: Query<(&mut Transform, &AnimationConfig, &mut Sprite, &mut Agent), With<Agent>>,
     time: Res<Time>,
 ) {
-    let mut direction = Vec3::ZERO;
-
     for (mut transform, config, mut sprite, mut agent) in &mut query {
-        if let Some(dest) = agent.destination {
-            if dest.distance(transform.translation) > 50. {
-                direction = (dest - transform.translation).normalize();
-            } else {
-                agent.destination = Option::None;
+        if let Some(action) = agent.get_action() {
+            match action._type {
+                ActionType::WALK(destination) => {
+                    if destination.distance(transform.translation) > 50. {
+                        let mut direction = (destination - transform.translation).normalize();
+                        movement(&mut direction, &mut transform, &config, &mut sprite, &time);
+                    } else {
+                        agent.complete_current_action()
+                    }
+                }
             }
         } else {
-            let mut rnd = rand::thread_rng();
-            let max = 500.;
-
-            agent.destination = Some(Vec3 {
-                x: rnd.gen_range(-max..max),
-                y: rnd.gen_range(-max..max),
-                z: 0.,
-            });
+            agent.new_action();
         }
-
-        movement(&mut direction, &mut transform, &config, &mut sprite, &time)
     }
 }
+
+// fn agent_movement(
+//     mut query: Query<(&mut Transform, &AnimationConfig, &mut Sprite, &mut Agent), With<Agent>>,
+//     time: Res<Time>,
+// ) {
+//     let mut direction = Vec3::ZERO;
+//
+//     for (mut transform, config, mut sprite, mut agent) in &mut query {
+//         if let Some(dest) = agent.destination {
+//             if dest.distance(transform.translation) > 50. {
+//                 direction = (dest - transform.translation).normalize();
+//             } else {
+//                 agent.destination = Option::None;
+//             }
+//         } else {
+//             let mut rnd = rand::thread_rng();
+//             let max = 500.;
+//
+//             agent.destination = Some(Vec3 {
+//                 x: rnd.gen_range(-max..max),
+//                 y: rnd.gen_range(-max..max),
+//                 z: 0.,
+//             });
+//         }
+//
+//         movement(&mut direction, &mut transform, &config, &mut sprite, &time)
+//     }
+// }
 
 fn player_movement(
     keyboard_input: Res<ButtonInput<KeyCode>>,
