@@ -45,57 +45,182 @@ impl AnimationConfig {
     }
 }
 
-#[derive(Component)]
+#[derive(Debug, Copy, Clone)]
+enum NeedType {
+    EAT,
+    DRINK,
+    SLEEP,
+}
+
+impl NeedType {
+    fn as_index(&self) -> usize {
+        match self {
+            NeedType::EAT => 0,
+            NeedType::DRINK => 1,
+            NeedType::SLEEP => 2,
+        }
+    }
+}
+
+const LOCATIONS: [Vec3; 3] = [
+    Vec3::new(300., 400., 0.), // EAT
+    Vec3::new(400., 300., 0.), // DRINK
+    Vec3::new(200., 200., 0.), // SLEEP
+];
+
+fn get_location(need: NeedType) -> Vec3 {
+    LOCATIONS[need.as_index()]
+}
+
+#[derive(Component, Debug)]
 struct Agent {
     action_system: ActionSystem,
+    hungry: usize,
+    eat_queued: bool,
+    thirst: usize,
+    drink_queued: bool,
+    sleep: usize,
+    sleep_queued: bool
 }
 
 impl Agent {
     fn new() -> Self {
         Self {
+            hungry: 0,
+            thirst: 0,
+            sleep: 0,
+            eat_queued: false,
+            sleep_queued: false,
+            drink_queued: false,
             action_system: ActionSystem {
                 queue: VecDeque::new(),
             },
         }
     }
 
-    fn get_action(&self) -> Option<&Action> {
+    fn frame_update(&mut self) -> Option<&Action> {
+        self.hungry += 1;
+        self.sleep += 1;
+        self.thirst += 1;
+
+        if self.hungry > 1000 && !self.eat_queued {
+            self.action_system.new_action(Some(ActionType::EAT));
+            self.eat_queued = true;
+        }
+
+        if self.sleep > 1000 && !self.sleep_queued {
+            self.action_system.new_action(Some(ActionType::SLEEP));
+            self.sleep_queued = true;
+        }
+
+        if self.thirst > 1000 && !self.drink_queued {
+            self.action_system.new_action(Some(ActionType::DRINK));
+            self.drink_queued = true;
+        }
+
+        dbg!(&self);
+
         self.action_system.queue.front()
     }
 
+    fn get_action(&mut self) -> Option<&Action> {
+        self.action_system.get_action()
+    }
+
     fn complete_current_action(&mut self) {
-        self.action_system.queue.pop_front();
+        if let Some(action) = self.action_system.queue.pop_front() {
+            match action._type {
+                ActionType::SLEEP => {
+                    self.sleep = 0;
+                    self.sleep_queued = false;
+                }
+                ActionType::EAT => {
+                    self.hungry = 0;
+                    self.eat_queued = false;
+                }
+                ActionType::DRINK => {
+                    self.thirst = 0;
+                    self.drink_queued = false;
+                }
+                _ => {}
+            }
+        }
     }
 
     fn new_action(&mut self) {
-        self.action_system.new_action();
+        self.action_system.new_action(None);
     }
 }
 
+#[derive(Debug)]
 enum ActionType {
     WALK(Vec3),
+    EAT,
+    DRINK,
+    SLEEP,
 }
 
+#[derive(Debug)]
 struct Action {
     _type: ActionType,
 }
 
+#[derive(Debug)]
 struct ActionSystem {
     queue: VecDeque<Action>,
 }
 
 impl ActionSystem {
-    fn new_action(&mut self) {
-        let mut rnd = rand::thread_rng();
-        let max = 500.;
+    fn get_action(&mut self) -> Option<&Action> {
+        self.queue.front()
+    }
 
-        self.queue.push_back(Action {
-            _type: ActionType::WALK(Vec3 {
-                x: rnd.gen_range(-max..max),
-                y: rnd.gen_range(-max..max),
-                z: 0.,
-            }),
-        });
+    fn new_action(&mut self, action: Option<ActionType>) {
+        match action {
+            None => {
+                let mut rnd = rand::thread_rng();
+                let max = 500.;
+
+                self.queue.push_back(Action {
+                    _type: ActionType::WALK(Vec3 {
+                        x: rnd.gen_range(-max..max),
+                        y: rnd.gen_range(-max..max),
+                        z: 0.,
+                    }),
+                })
+            }
+            Some(action_type) => match action_type {
+                ActionType::SLEEP => {
+                    self.queue.push_front(Action {
+                        _type: ActionType::SLEEP,
+                    });
+                    self.queue.push_front(Action {
+                        _type: ActionType::WALK(get_location(NeedType::SLEEP)),
+                    });
+                }
+                ActionType::EAT => {
+                    self.queue.push_front(Action {
+                        _type: ActionType::EAT,
+                    });
+                    self.queue.push_front(Action {
+                        _type: ActionType::WALK(get_location(NeedType::EAT)),
+                    });
+                }
+                ActionType::DRINK => {
+                    self.queue.push_front(Action {
+                        _type: ActionType::DRINK,
+                    });
+                    self.queue.push_front(Action {
+                        _type: ActionType::WALK(get_location(NeedType::DRINK)),
+                    });
+                }
+                ActionType::WALK(destination) => {
+                    self.queue.push_front(Action {
+                        _type: ActionType::WALK(destination),
+                    });
+                }
+            },
+        }
     }
 }
 
@@ -151,6 +276,8 @@ fn agent_frame(
     time: Res<Time>,
 ) {
     for (mut transform, config, mut sprite, mut agent) in &mut query {
+        agent.frame_update();
+
         if let Some(action) = agent.get_action() {
             match action._type {
                 ActionType::WALK(destination) => {
@@ -160,6 +287,10 @@ fn agent_frame(
                     } else {
                         agent.complete_current_action()
                     }
+                }
+                _ => {
+                    println!("action done");
+                    agent.complete_current_action()
                 }
             }
         } else {

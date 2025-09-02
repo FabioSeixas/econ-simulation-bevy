@@ -8,7 +8,7 @@ Playing around with Bevy
 ### Next moves
 
 - [x] start action system
-- [ ] decision making inside action system
-  - [ ] add basic agent needs (hungry, thirst, sleep)
-  - [ ] add points in the map where needs can be satisfied
-  - [ ] agent satisfy his need when necessary
+- [x] decision making inside action system
+  - [x] add basic agent needs (hungry, thirst, sleep)
+  - [x] add points in the map where needs can be satisfied
+  - [x] agent satisfy his need when necessary
