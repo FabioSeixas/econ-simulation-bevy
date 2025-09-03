@@ -1,0 +1,80 @@
+use bevy::prelude::*;
+
+use crate::action::*;
+use crate::locations::*;
+
+#[derive(Component, Debug)]
+pub struct Agent {
+    action_system: ActionSystem,
+    hungry: usize,
+    eat_queued: bool,
+    thirst: usize,
+    drink_queued: bool,
+    sleep: usize,
+    sleep_queued: bool,
+}
+
+impl Agent {
+    pub fn new() -> Self {
+        Self {
+            hungry: 0,
+            thirst: 0,
+            sleep: 0,
+            eat_queued: false,
+            sleep_queued: false,
+            drink_queued: false,
+            action_system: ActionSystem::new(),
+        }
+    }
+
+    pub fn frame_update(&mut self) -> Option<&Action> {
+        self.hungry += 1;
+        self.sleep += 1;
+        self.thirst += 1;
+
+        if self.hungry > NEED_THRESHOLD && !self.eat_queued {
+            self.action_system.new_action(Some(ActionType::EAT));
+            self.eat_queued = true;
+        }
+
+        if self.sleep > NEED_THRESHOLD && !self.sleep_queued {
+            self.action_system.new_action(Some(ActionType::SLEEP));
+            self.sleep_queued = true;
+        }
+
+        if self.thirst > NEED_THRESHOLD && !self.drink_queued {
+            self.action_system.new_action(Some(ActionType::DRINK));
+            self.drink_queued = true;
+        }
+
+        self.action_system.get_action()
+    }
+
+    pub fn get_action(&mut self) -> Option<&Action> {
+        self.action_system.get_action()
+    }
+
+    pub fn complete_current_action(&mut self) {
+        if let Some(action) = self.action_system.complete_current_action() {
+            match action.action_type {
+                ActionType::SLEEP => {
+                    self.sleep = 0;
+                    self.sleep_queued = false;
+                }
+                ActionType::EAT => {
+                    self.hungry = 0;
+                    self.eat_queued = false;
+                }
+                ActionType::DRINK => {
+                    self.thirst = 0;
+                    self.drink_queued = false;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    pub fn new_action(&mut self) {
+        self.action_system.new_action(None);
+    }
+}
