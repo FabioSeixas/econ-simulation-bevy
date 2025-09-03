@@ -1,6 +1,8 @@
 mod action;
 mod agent;
 mod locations;
+mod item;
+mod inventory;
 
 use bevy::log::*;
 use bevy::prelude::*;

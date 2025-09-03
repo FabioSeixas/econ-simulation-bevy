@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::action::*;
+use crate::inventory::Inventory;
 use crate::locations::*;
 
 #[derive(Component, Debug)]
@@ -12,6 +13,7 @@ pub struct Agent {
     drink_queued: bool,
     sleep: usize,
     sleep_queued: bool,
+    inventory: Inventory,
 }
 
 impl Agent {
@@ -24,6 +26,7 @@ impl Agent {
             sleep_queued: false,
             drink_queued: false,
             action_system: ActionSystem::new(),
+            inventory: Inventory::new(),
         }
     }
 
