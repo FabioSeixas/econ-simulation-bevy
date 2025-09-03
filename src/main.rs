@@ -62,6 +62,8 @@ impl NeedType {
     }
 }
 
+const NEED_THRESHOLD: usize = 500;
+
 const LOCATIONS: [Vec3; 3] = [
     Vec3::new(300., 400., 0.), // EAT
     Vec3::new(400., 300., 0.), // DRINK
@@ -103,22 +105,20 @@ impl Agent {
         self.sleep += 1;
         self.thirst += 1;
 
-        if self.hungry > 1000 && !self.eat_queued {
+        if self.hungry > NEED_THRESHOLD && !self.eat_queued {
             self.action_system.new_action(Some(ActionType::EAT));
             self.eat_queued = true;
         }
 
-        if self.sleep > 1000 && !self.sleep_queued {
+        if self.sleep > NEED_THRESHOLD && !self.sleep_queued {
             self.action_system.new_action(Some(ActionType::SLEEP));
             self.sleep_queued = true;
         }
 
-        if self.thirst > 1000 && !self.drink_queued {
+        if self.thirst > NEED_THRESHOLD && !self.drink_queued {
             self.action_system.new_action(Some(ActionType::DRINK));
             self.drink_queued = true;
         }
-
-        dbg!(&self);
 
         self.action_system.queue.front()
     }
@@ -289,7 +289,6 @@ fn agent_frame(
                     }
                 }
                 _ => {
-                    println!("action done");
                     agent.complete_current_action()
                 }
             }
