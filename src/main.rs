@@ -6,6 +6,7 @@ use bevy::log::*;
 use bevy::prelude::*;
 
 use crate::agent::*;
+use crate::action::*;
 
 fn main() {
     App::new()
@@ -103,7 +104,7 @@ fn agent_frame(
         agent.frame_update();
 
         if let Some(action) = agent.get_action() {
-            match action._type {
+            match action.action_type {
                 ActionType::WALK(destination) => {
                     if destination.distance(transform.translation) > 50. {
                         let mut direction = (destination - transform.translation).normalize();
