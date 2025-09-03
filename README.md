@@ -12,3 +12,18 @@ Playing around with Bevy
   - [x] add basic agent needs (hungry, thirst, sleep)
   - [x] add points in the map where needs can be satisfied
   - [x] agent satisfy his need when necessary
+- [ ] basic trading (food and water)
+  - [ ] basic inventory
+  - [ ] create items "meat" and "water" for now
+  - [ ] create item "money" ?
+  - [ ] basic roles ("none" and "seller" for now)
+  - [ ] set agent roles on game setup (agent::new())
+  - [ ] agent system define actions based on agent role (call role system to ask for next role move)
+  - [ ] agents interaction
+    - [ ] agent queue (on action system)
+    - [ ] queue action to interact with someone
+    - [ ] basic trading (fixed price for now)
+- [ ] changes on how to fill needs
+  - [ ] when hungry, go buy "meat"
+  - [ ] after buy move away before eat
+  - [ ] eat must take some time
