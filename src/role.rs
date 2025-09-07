@@ -1,24 +1,72 @@
-// use rand::prelude::*;
+use bevy::prelude::Vec3;
+use rand::prelude::*;
+
+use crate::locations::{get_location, NeedType};
+
+#[derive(Debug)]
+pub struct Task {
+    pub _id: u8,
+    pub _name: String,
+    pub _where: Vec3,
+    pub _duration: u32,
+    // pub category: Vec3,
+}
+
+impl Task {
+    pub fn new() -> Self {
+        Self {
+            _duration: 0,
+            _where: Vec3::new(0., 0., 0.),
+            _name: String::from(""),
+            _id: 1,
+        }
+    }
+}
 
 pub trait Role: Sync + Send + std::fmt::Debug {
     fn get_name(&self) -> &str;
+
+    // fn tasks(&self) -> &Vec<Task>;
+    // fn tasks_mut(&mut self) -> &mut Vec<Task>; // mutable access
+    fn get_next_task(&mut self, buf: &mut Task);
 }
 
 #[derive(Debug)]
 pub struct Seller;
 
-#[derive(Debug)]
-pub struct NoRole;
-
 impl Role for Seller {
     fn get_name(&self) -> &str {
         "Seller"
     }
+
+    fn get_next_task(&mut self, buf: &mut Task) {
+        buf._id = 1;
+        buf._name = String::from("Sell");
+        buf._where = get_location(NeedType::EAT);
+        buf._duration = 1000
+    }
 }
+
+#[derive(Debug)]
+pub struct NoRole;
 
 impl Role for NoRole {
     fn get_name(&self) -> &str {
         "No Role"
+    }
+
+    fn get_next_task(&mut self, buf: &mut Task) {
+        let mut rnd = rand::thread_rng();
+        let max = 500.;
+
+        buf._id = 1;
+        buf._name = String::from("Just Walk");
+        buf._where = Vec3 {
+            x: rnd.gen_range(-max..max),
+            y: rnd.gen_range(-max..max),
+            z: 0.,
+        };
+        buf._duration = 0
     }
 }
 

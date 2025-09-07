@@ -15,7 +15,7 @@ pub struct Agent {
     sleep: usize,
     sleep_queued: bool,
     inventory: Inventory,
-    role: Box<dyn Role  + Send + Sync>
+    role: Box<dyn Role + Send + Sync>,
 }
 
 impl Agent {
@@ -29,7 +29,7 @@ impl Agent {
             drink_queued: false,
             action_system: ActionSystem::new(),
             inventory: Inventory::new_seller(),
-            role: get_seller_role()
+            role: get_seller_role(),
         }
     }
     pub fn new() -> Self {
@@ -42,7 +42,7 @@ impl Agent {
             drink_queued: false,
             action_system: ActionSystem::new(),
             inventory: Inventory::new(),
-            role: get_random_role()
+            role: get_random_role(),
         }
     }
 
@@ -94,6 +94,8 @@ impl Agent {
     }
 
     pub fn new_action(&mut self) {
-        self.action_system.new_action(None);
+        let mut task = Task::new();
+        self.role.get_next_task(&mut task);
+        self.action_system.new_action_from_task(task);
     }
 }
