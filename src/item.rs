@@ -7,6 +7,7 @@ pub struct Item {
 
 #[derive(Debug, Hash, PartialEq, Eq)]
 pub enum ItemEnum {
+    MONEY,
     MEAT,
     WATER
 }

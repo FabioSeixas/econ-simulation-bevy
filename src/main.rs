@@ -3,6 +3,7 @@ mod agent;
 mod locations;
 mod item;
 mod inventory;
+mod role;
 
 use bevy::log::*;
 use bevy::prelude::*;
@@ -67,7 +68,7 @@ fn setup(
 
     let scale = Vec3::splat(1.0);
 
-    for _ in 0..50 {
+    for _ in 0..10 {
         commands.spawn((
             Sprite {
                 image: texture.clone(),
@@ -79,6 +80,22 @@ fn setup(
             },
             Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
             Agent::new(),
+            AnimationConfig::new(),
+        ));
+    }
+
+    for _ in 0..2 {
+        commands.spawn((
+            Sprite {
+                image: texture.clone(),
+                texture_atlas: Some(TextureAtlas {
+                    layout: texture_atlas_layout.clone(),
+                    index: 0,
+                }),
+                ..default()
+            },
+            Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
+            Agent::new_seller(),
             AnimationConfig::new(),
         ));
     }

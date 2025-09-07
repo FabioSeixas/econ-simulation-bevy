@@ -8,9 +8,25 @@ pub struct Inventory {
 }
 
 impl Inventory {
-    pub fn new() -> Self {
+    pub fn new_seller() -> Self {
+        let mut items = HashMap::new();
+
+        items.insert(ItemEnum::MEAT, 100);
+        items.insert(ItemEnum::WATER, 100);
+        items.insert(ItemEnum::MONEY, 50);
+
         Self {
-            items: HashMap::new(),
+            items
+        }
+    }
+
+    pub fn new() -> Self {
+        let mut items = HashMap::new();
+
+        items.insert(ItemEnum::MONEY, 50);
+
+        Self {
+            items
         }
     }
 

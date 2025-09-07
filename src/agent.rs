@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::action::*;
 use crate::inventory::Inventory;
 use crate::locations::*;
+use crate::role::*;
 
 #[derive(Component, Debug)]
 pub struct Agent {
@@ -14,9 +15,23 @@ pub struct Agent {
     sleep: usize,
     sleep_queued: bool,
     inventory: Inventory,
+    role: Box<dyn Role  + Send + Sync>
 }
 
 impl Agent {
+    pub fn new_seller() -> Self {
+        Self {
+            hungry: 0,
+            thirst: 0,
+            sleep: 0,
+            eat_queued: false,
+            sleep_queued: false,
+            drink_queued: false,
+            action_system: ActionSystem::new(),
+            inventory: Inventory::new_seller(),
+            role: get_seller_role()
+        }
+    }
     pub fn new() -> Self {
         Self {
             hungry: 0,
@@ -27,6 +42,7 @@ impl Agent {
             drink_queued: false,
             action_system: ActionSystem::new(),
             inventory: Inventory::new(),
+            role: get_random_role()
         }
     }
 
