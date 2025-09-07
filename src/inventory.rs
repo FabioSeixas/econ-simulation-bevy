@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
+use crate::item::ItemEnum;
+
 #[derive(Debug)]
 pub struct Inventory {
-    items: HashMap<u8, u8>, // item id, item quantity
+    items: HashMap<ItemEnum, u8>, // item id, item quantity
 }
 
 impl Inventory {
@@ -12,7 +14,7 @@ impl Inventory {
         }
     }
 
-    pub fn add(&mut self, id: u8, qty: u8) {
+    pub fn add(&mut self, id: ItemEnum, qty: u8) {
         match self.items.get(&id) {
             None => {
                 self.items.insert(id, qty);
@@ -23,14 +25,14 @@ impl Inventory {
         }
     }
 
-    pub fn get_qty(&self, id: u8) -> u8 {
+    pub fn get_qty(&self, id: ItemEnum) -> u8 {
         match self.items.get(&id) {
             None => 0,
             Some(current_qty) => *current_qty,
         }
     }
 
-    pub fn remove(&mut self, id: u8, qty: u8) -> u8 {
+    pub fn remove(&mut self, id: ItemEnum, qty: u8) -> u8 {
         match self.items.get(&id) {
             None => 0,
             Some(current_qty) => {
