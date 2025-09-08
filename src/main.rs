@@ -133,7 +133,7 @@ fn agent_frame(
                     }
                 }
                 _ => {
-                    agent.complete_current_action()
+                    agent.do_action()
                 }
             }
         } else {

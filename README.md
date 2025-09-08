@@ -19,7 +19,7 @@ Playing around with Bevy
   - [x] basic roles ("none" and "seller" for now)
   - [ ] set agent roles on game setup (agent::new())
   - [x] agent system define actions based on agent role (call role system to ask for next role move)
-  - [ ] agent "do_action" method to spend some time "doing" the action (some work from role)
+  - [x] agent "do_action" method to spend some time "doing" the action (some work from role)
   - [ ] update agent "complete_current_action" method to when is a work (must call role back to say "I did your task")
   - [ ] agents interaction
     - [ ] agent queue (on action system)

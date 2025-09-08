@@ -52,17 +52,17 @@ impl Agent {
         self.thirst += 1;
 
         if self.hungry > NEED_THRESHOLD && !self.eat_queued {
-            self.action_system.new_action(Some(ActionType::EAT));
+            self.action_system.new_action(ActionType::EAT);
             self.eat_queued = true;
         }
 
         if self.sleep > NEED_THRESHOLD && !self.sleep_queued {
-            self.action_system.new_action(Some(ActionType::SLEEP));
+            self.action_system.new_action(ActionType::SLEEP);
             self.sleep_queued = true;
         }
 
         if self.thirst > NEED_THRESHOLD && !self.drink_queued {
-            self.action_system.new_action(Some(ActionType::DRINK));
+            self.action_system.new_action(ActionType::DRINK);
             self.drink_queued = true;
         }
 
@@ -71,6 +71,10 @@ impl Agent {
 
     pub fn get_action(&mut self) -> Option<&Action> {
         self.action_system.get_action()
+    }
+
+    pub fn do_action(&mut self) {
+        self.action_system.do_action()
     }
 
     pub fn complete_current_action(&mut self) {

@@ -20,7 +20,7 @@ impl NeedType {
 pub const NEED_THRESHOLD: usize = 500;
 
 const LOCATIONS: [Vec3; 3] = [
-    Vec3::new(300., 400., 0.), // EAT
+    Vec3::new(300., 300., 0.), // EAT
     Vec3::new(400., 300., 0.), // DRINK
     Vec3::new(200., 200., 0.), // SLEEP
 ];

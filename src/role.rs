@@ -10,6 +10,7 @@ pub struct Task {
     pub _where: Vec3,
     pub _duration: u32,
     // pub category: Vec3,
+    // pub callback: ??
 }
 
 impl Task {
