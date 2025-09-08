@@ -1,28 +1,7 @@
 use bevy::prelude::Vec3;
 use rand::prelude::*;
 
-use crate::locations::{get_location, NeedType};
-
-#[derive(Debug)]
-pub struct Task {
-    pub _id: u8,
-    pub _name: String,
-    pub _where: Vec3,
-    pub _duration: u32,
-    // pub category: Vec3,
-    // pub callback: ??
-}
-
-impl Task {
-    pub fn new() -> Self {
-        Self {
-            _duration: 0,
-            _where: Vec3::new(0., 0., 0.),
-            _name: String::from(""),
-            _id: 1,
-        }
-    }
-}
+use crate::{locations::{get_location, NeedType}, task::Task, ActionType};
 
 pub trait Role: Sync + Send + std::fmt::Debug {
     fn get_name(&self) -> &str;
@@ -44,7 +23,8 @@ impl Role for Seller {
         buf._id = 1;
         buf._name = String::from("Sell");
         buf._where = get_location(NeedType::EAT);
-        buf._duration = 1000
+        buf._duration = 1000;
+        buf._action_type = ActionType::WORK;
     }
 }
 
@@ -67,7 +47,8 @@ impl Role for NoRole {
             y: rnd.gen_range(-max..max),
             z: 0.,
         };
-        buf._duration = 0
+        buf._duration = 0;
+        buf._action_type = ActionType::WALK(buf._where);
     }
 }
 

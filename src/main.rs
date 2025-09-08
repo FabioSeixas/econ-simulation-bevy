@@ -1,15 +1,18 @@
 mod action;
 mod agent;
-mod locations;
-mod item;
+mod events;
 mod inventory;
+mod item;
+mod locations;
 mod role;
+mod task;
 
 use bevy::log::*;
 use bevy::prelude::*;
+use events::TaskEvent;
 
-use crate::agent::*;
 use crate::action::*;
+use crate::agent::*;
 
 fn main() {
     App::new()
@@ -17,10 +20,33 @@ fn main() {
             level: Level::DEBUG, // Set minimum level to show debug logs
             ..default()
         }))
+        .init_resource::<Heartbeat>()
+        .add_event::<TaskEvent>()
         .add_systems(Startup, setup)
-        .add_systems(Update, player_movement)
+        // .add_systems(Update, player_movement)
+        .add_systems(Update, handle_events)
         .add_systems(Update, agent_frame)
+        .add_systems(Update, heartbeat_system)
         .run();
+}
+
+#[derive(Resource)]
+struct Heartbeat(Timer);
+
+impl Default for Heartbeat {
+    fn default() -> Self {
+        Self(Timer::from_seconds(2.0, TimerMode::Repeating))
+    }
+}
+
+fn heartbeat_system(time: Res<Time>, mut heartbeat: ResMut<Heartbeat>, query: Query<&Agent>) {
+    if heartbeat.0.tick(time.delta()).just_finished() {
+        for agent in &query {
+            if agent.role.get_name() == String::from("No Role") {
+                agent.print_state();
+            }
+        }
+    }
 }
 
 #[derive(Component)]
@@ -68,8 +94,10 @@ fn setup(
 
     let scale = Vec3::splat(1.0);
 
-    for _ in 0..10 {
-        commands.spawn((
+    for _ in 0..1 {
+        let entity_id = commands.spawn_empty().id();
+
+        commands.entity(entity_id).insert((
             Sprite {
                 image: texture.clone(),
                 texture_atlas: Some(TextureAtlas {
@@ -78,14 +106,15 @@ fn setup(
                 }),
                 ..default()
             },
+            Agent::new(entity_id),
             Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
-            Agent::new(),
             AnimationConfig::new(),
         ));
     }
 
     for _ in 0..2 {
-        commands.spawn((
+        let entity_id = commands.spawn_empty().id();
+        commands.entity(entity_id).insert((
             Sprite {
                 image: texture.clone(),
                 texture_atlas: Some(TextureAtlas {
@@ -95,32 +124,44 @@ fn setup(
                 ..default()
             },
             Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
-            Agent::new_seller(),
+            Agent::new_seller(entity_id),
             AnimationConfig::new(),
         ));
     }
 
-    commands.spawn((
-        Sprite {
-            image: texture.clone(),
-            texture_atlas: Some(TextureAtlas {
-                layout: texture_atlas_layout.clone(),
-                index: 0,
-            }),
-            ..default()
-        },
-        Transform::from_scale(scale),
-        Player,
-        AnimationConfig::new(),
-    ));
+    // commands.spawn((
+    //     Sprite {
+    //         image: texture.clone(),
+    //         texture_atlas: Some(TextureAtlas {
+    //             layout: texture_atlas_layout.clone(),
+    //             index: 0,
+    //         }),
+    //         ..default()
+    //     },
+    //     Transform::from_scale(scale),
+    //     Player,
+    //     AnimationConfig::new(),
+    // ));
+}
+
+fn handle_events(mut reader: EventReader<TaskEvent>, mut query: Query<(Entity, &mut Agent)>) {
+    for event in reader.read() {
+        if let Ok((entity, mut agent)) = query.get_mut(event.target) {
+            println!("Agent {:?} will handle {:?}", entity, event.task);
+            agent.handle_event(event);
+        }
+    }
 }
 
 fn agent_frame(
     mut query: Query<(&mut Transform, &AnimationConfig, &mut Sprite, &mut Agent), With<Agent>>,
+    mut writer: EventWriter<TaskEvent>,
     time: Res<Time>,
 ) {
     for (mut transform, config, mut sprite, mut agent) in &mut query {
         agent.frame_update();
+
+        // agent.print_actions_list();
 
         if let Some(action) = agent.get_action() {
             match action.action_type {
@@ -132,9 +173,7 @@ fn agent_frame(
                         agent.complete_current_action()
                     }
                 }
-                _ => {
-                    agent.do_action()
-                }
+                _ => agent.do_action(&mut writer),
             }
         } else {
             agent.new_action();

@@ -4,7 +4,7 @@ use crate::item::ItemEnum;
 
 #[derive(Debug)]
 pub struct Inventory {
-    items: HashMap<ItemEnum, u8>, // item id, item quantity
+    items: HashMap<ItemEnum, usize>, // item id, item quantity
 }
 
 impl Inventory {
@@ -30,7 +30,7 @@ impl Inventory {
         }
     }
 
-    pub fn add(&mut self, id: ItemEnum, qty: u8) {
+    pub fn add(&mut self, id: ItemEnum, qty: usize) {
         match self.items.get(&id) {
             None => {
                 self.items.insert(id, qty);
@@ -41,14 +41,14 @@ impl Inventory {
         }
     }
 
-    pub fn get_qty(&self, id: ItemEnum) -> u8 {
+    pub fn get_qty(&self, id: ItemEnum) -> usize {
         match self.items.get(&id) {
             None => 0,
             Some(current_qty) => *current_qty,
         }
     }
 
-    pub fn remove(&mut self, id: ItemEnum, qty: u8) -> u8 {
+    pub fn remove(&mut self, id: ItemEnum, qty: usize) -> usize {
         match self.items.get(&id) {
             None => 0,
             Some(current_qty) => {
