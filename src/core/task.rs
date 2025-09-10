@@ -1,26 +1,48 @@
 use crate::core::{action::*, item::*, location::*};
 
-#[derive(Debug)]
-pub struct Task {
-    pub id: u8,
-    pub name: String,
-    pub target_location: Location,
+pub trait Task {
+    fn to_actions(&self) -> Vec<Action>;
 }
 
-impl Task {
-    pub fn new(id: u8, name: &str, target_location: Location) -> Self {
+#[derive(Debug)]
+pub struct WalkTask {
+    pub destination: Location,
+}
+
+impl WalkTask {
+    pub fn new(destination: Location) -> Self {
+        Self { destination }
+    }
+}
+
+impl Task for WalkTask {
+    fn to_actions(&self) -> Vec<Action> {
+        vec![Action::Walk(Walk::new(self.destination))]
+    }
+}
+
+#[derive(Debug)]
+pub struct BuyTask {
+    pub qty: usize,
+    pub item: ItemEnum,
+    pub location: Location,
+}
+
+impl BuyTask {
+    pub fn new(item: ItemEnum, qty: usize, location: Location) -> Self {
         Self {
-            id,
-            name: name.to_string(),
-            target_location,
+            item,
+            qty,
+            location,
         }
     }
+}
 
-    // Convert a task into associated actions
-    pub fn to_actions(&self) -> Vec<Action> {
+impl Task for BuyTask {
+    fn to_actions(&self) -> Vec<Action> {
         vec![
-            Action::Walk(Walk::new(self.target_location)),
-            Action::BUY(BuyAction::new(ItemEnum::MEAT, 1)),
+            Action::Walk(Walk::new(self.location)),
+            Action::BUY(BuyAction::new(self.item.clone(), self.qty)),
         ]
     }
 }

@@ -4,7 +4,7 @@ use crate::core::{
     item::ItemEnum,
     needs::*,
     role::{get_random_role, Role},
-    task::Task,
+    task::*,
 };
 use bevy::prelude::*;
 use std::collections::VecDeque;
@@ -69,7 +69,7 @@ impl Agent {
             return;
         }
 
-        for action in Task::new(1, "Get Food", [100.0, 100.0, 0.0]).to_actions() {
+        for action in BuyTask::new(ItemEnum::MEAT, 1, [100.0, 100.0, 0.0]).to_actions() {
             self.queue.push_back(action);
         }
     }

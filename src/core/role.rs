@@ -1,4 +1,4 @@
-use super::task::Task;
+use super::task::*;
 use rand::Rng;
 
 pub trait Role: Sync + Send + std::fmt::Debug {
@@ -7,7 +7,7 @@ pub trait Role: Sync + Send + std::fmt::Debug {
     // fn tasks(&self) -> &Vec<Task>;
     // fn tasks_mut(&mut self) -> &mut Vec<Task>; // mutable access
     // fn get_next_task(&mut self, buf: &mut Task);
-    fn get_next_task(&self) -> Task;
+    fn get_next_task(&self) -> Box<dyn Task>;
 }
 
 // #[derive(Debug)]
@@ -18,13 +18,14 @@ pub trait Role: Sync + Send + std::fmt::Debug {
 //         "Seller"
 //     }
 //
-//     fn get_next_task(&mut self, buf: &mut Task) {
-//         buf._id = 1;
-//         buf._name = String::from("Sell");
-//         buf._where = get_location(Nee::EAT);
-//         buf._duration = 1000;
-//         buf._action_type = ActionType::WORK;
+//     fn get_next_task(&self) -> Task {
+//         Task::new(
+//             1,
+//             "Just Walk",
+//             [rnd.gen_range(-max..max), rnd.gen_range(-max..max), 0.],
+//         )
 //     }
+//
 // }
 
 #[derive(Debug)]
@@ -35,15 +36,15 @@ impl Role for NoRole {
         "No Role"
     }
 
-    fn get_next_task(&self) -> Task {
+    fn get_next_task(&self) -> Box<dyn Task> {
         let mut rnd = rand::thread_rng();
         let max = 500.;
 
-        Task::new(
-            1,
-            "Just Walk",
-            [rnd.gen_range(-max..max), rnd.gen_range(-max..max), 0.],
-        )
+        Box::new(WalkTask::new([
+            rnd.gen_range(-max..max),
+            rnd.gen_range(-max..max),
+            0.,
+        ]))
     }
 }
 
