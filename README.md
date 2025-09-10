@@ -4,8 +4,20 @@ Playing around with Bevy
 
 <img width="1009" height="712" alt="image" src="https://github.com/user-attachments/assets/bf0812c2-9323-4e53-8ad8-000613f6a4e0" />
 
+### Next moves (current)
 
-### Next moves
+- [ ] start roles
+  - [ ] add "No Role" role. The default task is walking around
+  - [ ] Agent calls role to get next task and actions
+- [ ] add "Seller" role
+  - [ ] The default task is selling (using duration)
+  - [ ] At setup add a lot of MEAT item for this agent
+  - [ ] Interaction between agents
+    - [ ] agent with buy action start interaction (send event to seller agent)
+    - [ ] agent seller receive the event and add it to some internal management where all interactions stay (so multiple buyers can be handled by a single seller)
+    - [ ] agent seller send event back to buyer. And so on until trade is done.
+
+### Next moves (old)
 
 - [x] start action system
 - [x] decision making inside action system
