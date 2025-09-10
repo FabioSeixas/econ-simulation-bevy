@@ -1,18 +1,13 @@
-mod action;
-mod agent;
-mod events;
-mod inventory;
-mod item;
-mod locations;
-mod role;
-mod task;
+mod core;
+mod ecs;
 
 use bevy::log::*;
 use bevy::prelude::*;
-use events::TaskEvent;
+use ecs::action::buy_action_callback;
+use ecs::action::consume_action_callback;
 
-use crate::action::*;
-use crate::agent::*;
+use crate::core::action::*;
+use crate::ecs::agent::*;
 
 fn main() {
     App::new()
@@ -20,33 +15,20 @@ fn main() {
             level: Level::DEBUG, // Set minimum level to show debug logs
             ..default()
         }))
-        .init_resource::<Heartbeat>()
-        .add_event::<TaskEvent>()
+        .add_event::<ActionCompleted>()
         .add_systems(Startup, setup)
-        // .add_systems(Update, player_movement)
-        .add_systems(Update, handle_events)
-        .add_systems(Update, agent_frame)
-        .add_systems(Update, heartbeat_system)
+        .add_systems(Update, (agent_frame, movement_frame, event_completion))
         .run();
 }
 
-#[derive(Resource)]
-struct Heartbeat(Timer);
-
-impl Default for Heartbeat {
-    fn default() -> Self {
-        Self(Timer::from_seconds(2.0, TimerMode::Repeating))
-    }
+#[derive(Event)]
+struct ActionCompleted {
+    pub entity: Entity,
 }
 
-fn heartbeat_system(time: Res<Time>, mut heartbeat: ResMut<Heartbeat>, query: Query<&Agent>) {
-    if heartbeat.0.tick(time.delta()).just_finished() {
-        for agent in &query {
-            if agent.role.get_name() == String::from("No Role") {
-                agent.print_state();
-            }
-        }
-    }
+#[derive(Component)]
+pub struct Walking {
+    pub destination: Vec3,
 }
 
 #[derive(Component)]
@@ -111,99 +93,141 @@ fn setup(
             AnimationConfig::new(),
         ));
     }
-
-    for _ in 0..2 {
-        let entity_id = commands.spawn_empty().id();
-        commands.entity(entity_id).insert((
-            Sprite {
-                image: texture.clone(),
-                texture_atlas: Some(TextureAtlas {
-                    layout: texture_atlas_layout.clone(),
-                    index: 0,
-                }),
-                ..default()
-            },
-            Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
-            Agent::new_seller(entity_id),
-            AnimationConfig::new(),
-        ));
-    }
-
-    // commands.spawn((
-    //     Sprite {
-    //         image: texture.clone(),
-    //         texture_atlas: Some(TextureAtlas {
-    //             layout: texture_atlas_layout.clone(),
-    //             index: 0,
-    //         }),
-    //         ..default()
-    //     },
-    //     Transform::from_scale(scale),
-    //     Player,
-    //     AnimationConfig::new(),
-    // ));
-}
-
-fn handle_events(mut reader: EventReader<TaskEvent>, mut query: Query<(Entity, &mut Agent)>) {
-    for event in reader.read() {
-        if let Ok((entity, mut agent)) = query.get_mut(event.target) {
-            println!("Agent {:?} will handle {:?}", entity, event.task);
-            agent.handle_event(event);
-        }
-    }
 }
 
 fn agent_frame(
-    mut query: Query<(&mut Transform, &AnimationConfig, &mut Sprite, &mut Agent), With<Agent>>,
-    mut writer: EventWriter<TaskEvent>,
+    mut query: Query<(Entity, &mut Agent), With<Agent>>,
+    mut commands: Commands,
+    mut action_completed_writer: EventWriter<ActionCompleted>,
     time: Res<Time>,
 ) {
-    for (mut transform, config, mut sprite, mut agent) in &mut query {
+    for (entity, mut agent) in &mut query {
         agent.frame_update();
 
-        // agent.print_actions_list();
-
-        if let Some(action) = agent.get_action() {
-            match action.action_type {
-                ActionType::WALK(destination) => {
-                    if destination.distance(transform.translation) > 50. {
-                        let mut direction = (destination - transform.translation).normalize();
-                        movement(&mut direction, &mut transform, &config, &mut sprite, &time);
-                    } else {
-                        agent.complete_current_action()
-                    }
-                }
-                _ => agent.do_action(&mut writer),
-            }
-        } else {
+        if agent.get_mut_action().is_none() {
             agent.new_action();
+            continue;
+        }
+
+        let action = agent.get_mut_action().unwrap();
+        match action {
+            Action::Walk(v) => match v.current_state() {
+                // ActionState::COMPLETED => {
+                //     agent.complete_current_action();
+                // }
+                // ActionState::IN_PROGRESS => {}
+                // ActionState::WAITING => {}
+                ActionState::CREATED => {
+                    v.update_state();
+                    let destination = v.get_destination();
+
+                    commands.entity(entity).insert(Walking {
+                        destination: Vec3 {
+                            x: destination[0],
+                            y: destination[1],
+                            z: destination[2],
+                        },
+                    });
+                }
+                _ => {}
+            },
+            Action::BUY(v) => match v.current_state() {
+                // ActionState::COMPLETED => {
+                //     buy_action_callback(agent, *v);
+                // }
+                // ActionState::IN_PROGRESS => {}
+                // ActionState::WAITING => {}
+                ActionState::CREATED => {
+                    v.update_state();
+                    v.price_paid = Some(3);
+                    action_completed_writer.send(ActionCompleted { entity });
+                }
+                _ => {}
+            },
+            Action::CONSUME(v) => match v.current_state() {
+                ActionState::COMPLETED => { }
+                ActionState::IN_PROGRESS => {
+                    if v.get_resting_duration() <= 0. {
+                        action_completed_writer.send(ActionCompleted { entity });
+                        v.complete();
+                        continue;
+                    }
+                    println!("consuming, {:?}", v.get_resting_duration());
+                    v.progress(time.delta_secs());
+                }
+                ActionState::WAITING => {}
+                ActionState::CREATED => {
+                    v.update_state();
+                    // action_completed_writer.send(ActionCompleted { entity });
+                }
+                _ => {}
+            },
         }
     }
 }
 
-fn player_movement(
-    keyboard_input: Res<ButtonInput<KeyCode>>,
-    player: Single<(&mut Transform, &AnimationConfig, &mut Sprite), With<Player>>,
-    time: Res<Time>,
+fn event_completion(
+    mut action_completed_reader: EventReader<ActionCompleted>,
+    mut agent_query: Query<&mut Agent>,
 ) {
-    let mut direction = Vec3::ZERO;
+    for event in action_completed_reader.read() {
+        if agent_query.get_mut(event.entity).is_err() {
+            warn!(
+                "ActionCompleted event for entity {:?}, but it has no Agent component!",
+                event.entity
+            );
+            continue;
+        }
 
-    if keyboard_input.pressed(KeyCode::ArrowUp) {
-        direction.y += 1.0;
-    }
-    if keyboard_input.pressed(KeyCode::ArrowDown) {
-        direction.y -= 1.0;
-    }
-    if keyboard_input.pressed(KeyCode::ArrowLeft) {
-        direction.x -= 1.0;
-    }
-    if keyboard_input.pressed(KeyCode::ArrowRight) {
-        direction.x += 1.0;
-    }
+        let mut agent = agent_query.get_mut(event.entity).unwrap();
 
-    let (mut transform, config, mut sprite) = player.into_inner();
+        if agent.get_action().is_none() {
+            continue;
+        }
 
-    movement(&mut direction, &mut transform, &config, &mut sprite, &time)
+        let action = agent.get_action().cloned().unwrap();
+        match action {
+            Action::Walk(_) => {
+                agent.complete_current_action();
+            }
+            Action::BUY(v) => {
+                buy_action_callback(&mut agent, &v);
+                agent.complete_current_action();
+            }
+            Action::CONSUME(v) => {
+                consume_action_callback(&mut agent, &v);
+                agent.complete_current_action();
+            }
+        }
+    }
+}
+
+fn movement_frame(
+    mut query: Query<
+        (
+            Entity,
+            &mut Transform,
+            &AnimationConfig,
+            &mut Sprite,
+            // &mut Agent,
+            &Walking,
+        ),
+        With<Walking>,
+    >,
+    time: Res<Time>,
+    mut commands: Commands,
+    mut action_completed_writer: EventWriter<ActionCompleted>,
+) {
+    for (entity, mut transform, config, mut sprite, walking) in &mut query {
+        if walking.destination.distance(transform.translation) > 50. {
+            let mut direction = (walking.destination - transform.translation).normalize();
+            movement(&mut direction, &mut transform, &config, &mut sprite, &time);
+        } else {
+            println!("action done");
+            commands.entity(entity).remove::<Walking>();
+            action_completed_writer.send(ActionCompleted { entity });
+        }
+    }
 }
 
 fn movement(

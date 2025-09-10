@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::item::ItemEnum;
+use crate::core::item::*;
 
 #[derive(Debug)]
 pub struct Inventory {
