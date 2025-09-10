@@ -8,7 +8,7 @@ Playing around with Bevy
 
 - [x] start roles
   - [x] add "No Role" role. The default task is walking around
-  - [ ] Agent calls role to get next task and actions
+  - [x] Agent calls role to get next task and actions
 - [ ] add "Seller" role
   - [ ] The default task is selling (using duration)
   - [ ] At setup add a lot of MEAT item for this agent
