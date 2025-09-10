@@ -3,7 +3,7 @@ use crate::core::{
     inventory::*,
     item::ItemEnum,
     needs::*,
-    role::{get_random_role, Role},
+    role::{get_random_role, get_seller_role, Role},
     task::*,
 };
 use bevy::prelude::*;
@@ -26,6 +26,17 @@ impl Agent {
             queue: VecDeque::new(),
             entity_id,
             role: get_random_role(),
+        }
+    }
+
+    pub fn new_seller(entity_id: Entity) -> Self {
+        // let inv = Inventory::new():
+        Self {
+            needs: Needs::new(),
+            inventory: Inventory::new(),
+            queue: VecDeque::new(),
+            entity_id,
+            role: get_seller_role(),
         }
     }
 

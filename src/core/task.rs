@@ -46,3 +46,23 @@ impl Task for BuyTask {
         ]
     }
 }
+
+#[derive(Debug)]
+pub struct SellTask {
+    pub location: Location,
+}
+
+impl SellTask {
+    pub fn new(location: Location) -> Self {
+        Self { location }
+    }
+}
+
+impl Task for SellTask {
+    fn to_actions(&self) -> Vec<Action> {
+        vec![
+            Action::Walk(Walk::new(self.location)),
+            Action::SELL(SellAction::new()),
+        ]
+    }
+}

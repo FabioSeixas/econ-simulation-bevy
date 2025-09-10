@@ -1,3 +1,4 @@
+use super::location::*;
 use super::task::*;
 use rand::Rng;
 
@@ -12,24 +13,6 @@ pub trait Role: Sync + Send + std::fmt::Debug {
     fn consume_next_task(&mut self) -> Option<Box<dyn Task>>;
     fn calculate_next_task(&mut self);
 }
-
-// #[derive(Debug)]
-// pub struct Seller;
-//
-// impl Role for Seller {
-//     fn get_name(&self) -> &str {
-//         "Seller"
-//     }
-//
-//     fn get_next_task(&self) -> Task {
-//         Task::new(
-//             1,
-//             "Just Walk",
-//             [rnd.gen_range(-max..max), rnd.gen_range(-max..max), 0.],
-//         )
-//     }
-//
-// }
 
 #[derive(Debug)]
 pub struct NoRole {
@@ -69,14 +52,53 @@ impl Role for NoRole {
     }
 }
 
-// pub fn get_seller_role() -> Box<dyn Role + Send + Sync> {
-//     Box::new(Seller)
-//     // let mut rng = thread_rng();
-//     // match rng.gen_range(0..2) {
-//     //     0 => Box::new(Seller),
-//     //     _ => Box::new(NoRole),
-//     // }
-// }
+#[derive(Debug)]
+pub struct Seller {
+    current_task: Option<Box<dyn Task>>,
+    location: Location,
+}
+
+impl Seller {
+    pub fn new(location: Location) -> Self {
+        Self {
+            current_task: None,
+            location,
+        }
+    }
+}
+
+impl Role for Seller {
+    fn get_name(&self) -> &str {
+        "Seller"
+    }
+
+    fn calculate_next_task(&mut self) {
+        if self.current_task.is_none() {
+            let task = Box::new(SellTask::new(self.location));
+            self.current_task = Some(task);
+        }
+    }
+
+    fn get_next_task(&self) -> Option<&dyn Task> {
+        self.current_task.as_deref()
+    }
+
+    fn consume_next_task(&mut self) -> Option<Box<dyn Task>> {
+        self.current_task.take()
+    }
+}
+
+pub fn get_seller_role() -> Box<dyn Role + Send + Sync> {
+    let mut rnd = rand::thread_rng();
+    let max = 500.;
+    let location = [rnd.gen_range(-max..max), rnd.gen_range(-max..max), 0.];
+    Box::new(Seller::new(location))
+    // let mut rng = thread_rng();
+    // match rng.gen_range(0..2) {
+    //     0 => Box::new(Seller),
+    //     _ => Box::new(NoRole),
+    // }
+}
 
 // not random for now
 pub fn get_random_role() -> Box<dyn Role + Send + Sync> {

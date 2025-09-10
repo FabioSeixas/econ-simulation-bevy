@@ -88,11 +88,29 @@ fn setup(
                 }),
                 ..default()
             },
-            Agent::new(entity_id),
+            Agent::new_seller(entity_id),
             Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
             AnimationConfig::new(),
         ));
     }
+
+    // for _ in 0..10 {
+    //     let entity_id = commands.spawn_empty().id();
+    //
+    //     commands.entity(entity_id).insert((
+    //         Sprite {
+    //             image: texture.clone(),
+    //             texture_atlas: Some(TextureAtlas {
+    //                 layout: texture_atlas_layout.clone(),
+    //                 index: 0,
+    //             }),
+    //             ..default()
+    //         },
+    //         Agent::new(entity_id),
+    //         Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
+    //         AnimationConfig::new(),
+    //     ));
+    // }
 }
 
 fn agent_frame(
@@ -144,21 +162,37 @@ fn agent_frame(
                 }
                 _ => {}
             },
-            Action::CONSUME(v) => match v.current_state() {
-                ActionState::COMPLETED => { }
+            Action::SELL(v) => match v.current_state() {
+                ActionState::COMPLETED => {}
                 ActionState::IN_PROGRESS => {
                     if v.get_resting_duration() <= 0. {
                         action_completed_writer.send(ActionCompleted { entity });
                         v.complete();
-                        continue;
+                    } else {
+                        println!("happily selling, {:?}", v.get_resting_duration());
+                        v.progress(time.delta_secs());
                     }
-                    println!("consuming, {:?}", v.get_resting_duration());
-                    v.progress(time.delta_secs());
                 }
                 ActionState::WAITING => {}
                 ActionState::CREATED => {
                     v.update_state();
-                    // action_completed_writer.send(ActionCompleted { entity });
+                }
+                _ => {}
+            },
+            Action::CONSUME(v) => match v.current_state() {
+                ActionState::COMPLETED => {}
+                ActionState::IN_PROGRESS => {
+                    if v.get_resting_duration() <= 0. {
+                        action_completed_writer.send(ActionCompleted { entity });
+                        v.complete();
+                    } else {
+                        println!("consuming, {:?}", v.get_resting_duration());
+                        v.progress(time.delta_secs());
+                    }
+                }
+                ActionState::WAITING => {}
+                ActionState::CREATED => {
+                    v.update_state();
                 }
                 _ => {}
             },
@@ -188,6 +222,9 @@ fn event_completion(
         let action = agent.get_action().cloned().unwrap();
         match action {
             Action::Walk(_) => {
+                agent.complete_current_action();
+            }
+            Action::SELL(_) => {
                 agent.complete_current_action();
             }
             Action::BUY(v) => {

@@ -1,15 +1,5 @@
-use crate::core::location::Location;
-
+use super::location::Location;
 use super::item::ItemEnum;
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ActionType {
-    WALK,
-    EAT,
-    DRINK,
-    WORK,
-    BUY,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActionState {
@@ -24,6 +14,7 @@ pub enum Action {
     Walk(Walk),
     BUY(BuyAction),
     CONSUME(ConsumeAction),
+    SELL(SellAction),
 }
 
 pub trait DestinationAction {
@@ -31,7 +22,6 @@ pub trait DestinationAction {
 }
 
 pub trait DurationAction {
-    fn get_total_duration(&self) -> f32;
     fn get_resting_duration(&self) -> f32;
     fn progress(&mut self, time: f32);
 }
@@ -148,9 +138,6 @@ impl ConsumeAction {
 }
 
 impl DurationAction for ConsumeAction {
-    fn get_total_duration(&self) -> f32 {
-        self.duration
-    }
     fn get_resting_duration(&self) -> f32 {
         self.resting_duration
     }
@@ -160,6 +147,50 @@ impl DurationAction for ConsumeAction {
 }
 
 impl StatefullAction for ConsumeAction {
+    fn current_state(&self) -> ActionState {
+        self.state
+    }
+
+    fn complete(&mut self) {
+        self.state = ActionState::COMPLETED;
+    }
+
+    fn update_state(&mut self) {
+        match self.state {
+            ActionState::CREATED => self.state = ActionState::IN_PROGRESS,
+            ActionState::WAITING => self.state = ActionState::IN_PROGRESS,
+            _ => {}
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SellAction {
+    state: ActionState,
+    duration: f32,
+    resting_duration: f32,
+}
+
+impl SellAction {
+    pub fn new() -> Self {
+        Self {
+            state: ActionState::CREATED,
+            duration: 25., 
+            resting_duration: 25.
+        }
+    }
+}
+
+impl DurationAction for SellAction {
+    fn get_resting_duration(&self) -> f32 {
+        self.resting_duration
+    }
+    fn progress(&mut self, time: f32) {
+        self.resting_duration -= time;
+    }
+}
+
+impl StatefullAction for SellAction {
     fn current_state(&self) -> ActionState {
         self.state
     }
