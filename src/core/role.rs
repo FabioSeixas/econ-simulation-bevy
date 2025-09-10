@@ -7,7 +7,10 @@ pub trait Role: Sync + Send + std::fmt::Debug {
     // fn tasks(&self) -> &Vec<Task>;
     // fn tasks_mut(&mut self) -> &mut Vec<Task>; // mutable access
     // fn get_next_task(&mut self, buf: &mut Task);
-    fn get_next_task(&self) -> Box<dyn Task>;
+    // fn get_next_task(&self) -> Box<dyn Task>;
+    fn get_next_task(&self) -> Option<&dyn Task>;
+    fn consume_next_task(&mut self) -> Option<Box<dyn Task>>;
+    fn calculate_next_task(&mut self);
 }
 
 // #[derive(Debug)]
@@ -29,22 +32,40 @@ pub trait Role: Sync + Send + std::fmt::Debug {
 // }
 
 #[derive(Debug)]
-pub struct NoRole;
+pub struct NoRole {
+    current_task: Option<Box<dyn Task>>,
+}
+
+impl NoRole {
+    pub fn new() -> Self {
+        Self { current_task: None }
+    }
+}
 
 impl Role for NoRole {
     fn get_name(&self) -> &str {
         "No Role"
     }
 
-    fn get_next_task(&self) -> Box<dyn Task> {
-        let mut rnd = rand::thread_rng();
-        let max = 500.;
+    fn calculate_next_task(&mut self) {
+        if self.current_task.is_none() {
+            let mut rnd = rand::thread_rng();
+            let max = 500.;
+            let task = Box::new(WalkTask::new([
+                rnd.gen_range(-max..max),
+                rnd.gen_range(-max..max),
+                0.,
+            ]));
+            self.current_task = Some(task);
+        }
+    }
 
-        Box::new(WalkTask::new([
-            rnd.gen_range(-max..max),
-            rnd.gen_range(-max..max),
-            0.,
-        ]))
+    fn get_next_task(&self) -> Option<&dyn Task> {
+        self.current_task.as_deref()
+    }
+
+    fn consume_next_task(&mut self) -> Option<Box<dyn Task>> {
+        self.current_task.take()
     }
 }
 
@@ -59,7 +80,7 @@ impl Role for NoRole {
 
 // not random for now
 pub fn get_random_role() -> Box<dyn Role + Send + Sync> {
-    Box::new(NoRole)
+    Box::new(NoRole::new())
 
     // let mut rng = thread_rng();
     // match rng.gen_range(0..2) {

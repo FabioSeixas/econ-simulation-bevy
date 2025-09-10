@@ -44,8 +44,12 @@ impl Agent {
             return self.deal_with_hungry();
         }
 
-        for action in self.role.get_next_task().to_actions() {
-            self.queue.push_back(action);
+        self.role.calculate_next_task();
+
+        if let Some(v) = self.role.consume_next_task() {
+            for action in v.to_actions() {
+                self.queue.push_back(action);
+            }
         }
     }
 

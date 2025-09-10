@@ -1,6 +1,6 @@
 use crate::core::{action::*, item::*, location::*};
 
-pub trait Task {
+pub trait Task: Sync + Send + std::fmt::Debug {
     fn to_actions(&self) -> Vec<Action>;
 }
 
