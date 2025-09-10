@@ -4,3 +4,4 @@ pub mod task;
 pub mod location;
 pub mod needs;
 pub mod item;
+pub mod role;

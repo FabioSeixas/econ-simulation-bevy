@@ -6,8 +6,8 @@ Playing around with Bevy
 
 ### Next moves (current)
 
-- [ ] start roles
-  - [ ] add "No Role" role. The default task is walking around
+- [x] start roles
+  - [x] add "No Role" role. The default task is walking around
   - [ ] Agent calls role to get next task and actions
 - [ ] add "Seller" role
   - [ ] The default task is selling (using duration)
