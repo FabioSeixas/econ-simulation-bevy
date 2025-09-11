@@ -1,5 +1,6 @@
-use super::location::Location;
 use super::item::ItemEnum;
+use super::location::Location;
+use rand::Rng;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActionState {
@@ -49,6 +50,15 @@ impl Walk {
     pub fn new(destination: Location) -> Self {
         Self {
             destination,
+            state: ActionState::CREATED,
+        }
+    }
+
+    pub fn new_random() -> Self {
+        let mut rnd = rand::thread_rng();
+        let max = 500.;
+        Self {
+            destination: [rnd.gen_range(-max..max), rnd.gen_range(-max..max), 0.],
             state: ActionState::CREATED,
         }
     }
@@ -179,8 +189,8 @@ impl SellAction {
     pub fn new() -> Self {
         Self {
             state: ActionState::CREATED,
-            duration: 25., 
-            resting_duration: 25.
+            duration: 25.,
+            resting_duration: 25.,
         }
     }
 }

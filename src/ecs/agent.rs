@@ -1,10 +1,13 @@
-use crate::core::{
-    action::*,
-    inventory::*,
-    item::ItemEnum,
-    needs::*,
-    role::{get_random_role, get_seller_role, Role},
-    task::*,
+use crate::{
+    core::{
+        action::*,
+        inventory::*,
+        item::ItemEnum,
+        needs::*,
+        role::{get_random_role, get_seller_role, Role},
+        task::*,
+    },
+    AgentInteraction,
 };
 use bevy::prelude::*;
 use std::collections::VecDeque;
@@ -14,8 +17,9 @@ pub struct Agent {
     pub entity_id: Entity,
     pub needs: Needs,
     pub inventory: Inventory,
-    queue: VecDeque<Action>,
+    action_queue: VecDeque<Action>,
     pub role: Box<dyn Role + Send + Sync>,
+    interaction_queue: VecDeque<AgentInteraction>,
 }
 
 impl Agent {
@@ -23,7 +27,8 @@ impl Agent {
         Self {
             needs: Needs::new(),
             inventory: Inventory::new(),
-            queue: VecDeque::new(),
+            action_queue: VecDeque::new(),
+            interaction_queue: VecDeque::new(),
             entity_id,
             role: get_random_role(),
         }
@@ -31,19 +36,20 @@ impl Agent {
 
     pub fn new_seller(entity_id: Entity) -> Self {
         let mut inv = Inventory::new();
-        inv.add(ItemEnum::MEAT, 50);
+        inv.add(ItemEnum::MEAT, 5000);
 
         Self {
             needs: Needs::new(),
             inventory: inv,
-            queue: VecDeque::new(),
+            action_queue: VecDeque::new(),
+            interaction_queue: VecDeque::new(),
             entity_id,
             role: get_seller_role(),
         }
     }
 
     pub fn complete_current_action(&mut self) {
-        let completed_action = self.queue.pop_front();
+        let completed_action = self.action_queue.pop_front();
         println!("action completed. {:?}", completed_action);
         println!("Current Inventory: {:?}", self.inventory);
     }
@@ -61,17 +67,17 @@ impl Agent {
 
         if let Some(v) = self.role.consume_next_task() {
             for action in v.to_actions() {
-                self.queue.push_back(action);
+                self.action_queue.push_back(action);
             }
         }
     }
 
     pub fn get_mut_action(&mut self) -> Option<&mut Action> {
-        self.queue.front_mut()
+        self.action_queue.front_mut()
     }
 
     pub fn get_action(&self) -> Option<&Action> {
-        self.queue.front()
+        self.action_queue.front()
     }
 
     pub fn frame_update(&mut self) {
@@ -81,13 +87,16 @@ impl Agent {
 
     fn deal_with_hungry(&mut self) {
         if self.inventory.get_qty(ItemEnum::MEAT) > 0 {
-            self.queue
+            self.action_queue
                 .push_front(Action::CONSUME(ConsumeAction::new(ItemEnum::MEAT, 1)));
+            self.action_queue
+                .push_front(Action::Walk(Walk::new_random()));
+
             return;
         }
 
         for action in BuyTask::new(ItemEnum::MEAT, 1, [100.0, 100.0, 0.0]).to_actions() {
-            self.queue.push_back(action);
+            self.action_queue.push_back(action);
         }
     }
 }

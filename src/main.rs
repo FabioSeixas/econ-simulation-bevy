@@ -1,6 +1,8 @@
 mod core;
 mod ecs;
 
+use std::collections::VecDeque;
+
 use bevy::log::*;
 use bevy::prelude::*;
 use ecs::action::{buy_action_callback, consume_action_callback};
@@ -18,36 +20,42 @@ fn main() {
         .add_event::<ActionCompleted>()
         .add_event::<AgentInteraction>()
         .init_resource::<KnowledgeManagement>()
-        .init_resource::<InteractionQueue>()
+        .init_resource::<OngoingInteractionsQueue>()
+        .init_resource::<NewInteractionsRequests>()
         .add_systems(Startup, setup)
         .add_systems(Update, (agent_frame, movement_frame, event_completion))
+        .add_systems(Update, send_new_interactions_requests_to_agents)
         .add_systems(
             Update,
             (
-                event_interaction.before(write_outgoing_interactions),
-                write_outgoing_interactions,
+                event_interaction.before(write_ongoing_interactions),
+                write_ongoing_interactions,
             ),
         )
         .run();
 }
 
-// type WhereToBuyKnowledge = (Entity, Vec3);
+#[derive(Resource, Default)]
+pub struct NewInteractionsRequests {
+    requests: Vec<(Entity, AgentInteraction)>,
+}
+
+impl NewInteractionsRequests {
+    pub fn add(&mut self, entity: Entity, interaction: AgentInteraction) {
+        self.requests.push((entity, interaction))
+    }
+
+    pub fn take(&mut self) -> Vec<(Entity, AgentInteraction)> {
+        std::mem::take(&mut self.requests)
+    }
+}
 
 #[derive(Resource, Default)]
 pub struct KnowledgeManagement {
-    // knowledge: HashMap<Entity, Vec<WhereToBuyKnowledge>>,
     seller: Vec<Entity>,
 }
 
 impl KnowledgeManagement {
-    // pub fn add(&mut self, entity: Entity, item: WhereToBuyKnowledge) {
-    //     match self.knowledge.get_mut(&entity) {
-    //         None => {
-    //             self.knowledge.insert(entity, vec![item]);
-    //         }
-    //         Some(v) => v.push(item),
-    //     }
-    // }
     pub fn add(&mut self, entity: Entity) {
         self.seller = vec![entity];
     }
@@ -62,30 +70,112 @@ struct ActionCompleted {
     pub entity: Entity,
 }
 
-#[derive(Resource, Default)]
-pub struct InteractionQueue {
-    pub interactions: Vec<AgentInteraction>,
+#[derive(Component)]
+pub struct AgentInteractionQueue {
+    queue: VecDeque<AgentInteraction>,
+    free: bool,
 }
 
-impl InteractionQueue {
+impl AgentInteractionQueue {
+    pub fn new() -> Self {
+        Self {
+            queue: VecDeque::new(),
+            free: true,
+        }
+    }
+
+    pub fn free(&mut self) {
+        self.free = true;
+    }
+
+    pub fn is_free(&self) -> bool {
+        self.free
+    }
+
+    pub fn add(&mut self, event: AgentInteraction) {
+        self.queue.push_back(event);
+    }
+
+    pub fn pop_first(&mut self) -> Option<AgentInteraction> {
+        match self.queue.pop_front() {
+            None => None,
+            Some(v) => {
+                self.free = false;
+                Some(v)
+            }
+        }
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct OngoingInteractionsQueue {
+    interactions: Vec<AgentInteraction>,
+}
+
+impl OngoingInteractionsQueue {
     pub fn add(&mut self, event: AgentInteraction) {
         self.interactions.push(event);
-        println!("interation added to the qeueue");
+        println!("interation added to the Ongoing Interactions Queue");
     }
 
     pub fn take(&mut self) -> Vec<AgentInteraction> {
         std::mem::take(&mut self.interactions)
     }
+
+    // pub fn add_with_delay(&mut self, event: AgentInteraction, delay: f32) {
+    //     self.delayed_interactions.push((event, delay));
+    //     println!("interation added to the delayed qeueue");
+    // }
+    //
+    // pub fn update_delayed(&mut self, time: f32) {
+    //     let ready: Vec<_> = {
+    //         self.delayed_interactions
+    //             .extract_if(.., |(_, delay)| {
+    //                 *delay -= time;
+    //                 return *delay < 0.;
+    //             })
+    //             .collect()
+    //     };
+    //
+    //     for (interaction, _) in ready {
+    //         println!(
+    //             "interation {:?} delayed qeueue e vai ser publicada",
+    //             interaction
+    //         );
+    //         self.add(interaction);
+    //     }
+    // }
 }
 
-fn write_outgoing_interactions(
+fn write_ongoing_interactions(
     mut interaction_writer: EventWriter<AgentInteraction>,
-    mut interaction_queue: ResMut<InteractionQueue>,
+    mut interaction_queue: ResMut<OngoingInteractionsQueue>,
 ) {
     let events_to_send = interaction_queue.take();
-    println!("events_to_send: {:?}", events_to_send);
+
+    if events_to_send.len() > 0 {
+        println!("events_to_send: {:?}", events_to_send);
+    }
+
     for event in events_to_send {
         interaction_writer.send(event);
+    }
+}
+
+fn send_new_interactions_requests_to_agents(
+    mut query: Query<&mut AgentInteractionQueue, With<AgentInteractionQueue>>,
+    mut new_interactions_requests: ResMut<NewInteractionsRequests>,
+) {
+    let new_interactions_to_send = new_interactions_requests.take();
+
+    if new_interactions_to_send.len() > 0 {
+        println!("events_to_send: {:?}", new_interactions_to_send);
+    }
+
+    for (entity, interaction) in new_interactions_to_send {
+        if let Ok(mut agent_queue) = query.get_mut(entity) {
+            agent_queue.add(interaction);
+        }
     }
 }
 
@@ -155,12 +245,13 @@ fn setup(
             Agent::new_seller(entity_id),
             Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
             AnimationConfig::new(),
+            AgentInteractionQueue::new(),
         ));
 
         knowledge.add(entity_id);
     }
 
-    for _ in 0..1 {
+    for _ in 0..500 {
         let entity_id = commands.spawn_empty().id();
 
         commands.entity(entity_id).insert((
@@ -175,20 +266,27 @@ fn setup(
             Agent::new(entity_id),
             Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
             AnimationConfig::new(),
+            AgentInteractionQueue::new(),
         ));
     }
 }
 
 fn agent_frame(
-    mut query: Query<(Entity, &mut Agent), With<Agent>>,
+    mut query: Query<(Entity, &mut AgentInteractionQueue, &mut Agent), With<Agent>>,
     mut commands: Commands,
     mut action_completed_writer: EventWriter<ActionCompleted>,
-    mut interaction_writer: EventWriter<AgentInteraction>,
+    mut ongoing_interactions: ResMut<OngoingInteractionsQueue>,
     time: Res<Time>,
     knowledge: Res<KnowledgeManagement>,
 ) {
-    for (entity, mut agent) in &mut query {
+    for (entity, mut interation_queue, mut agent) in &mut query {
         agent.frame_update();
+
+        if interation_queue.is_free() {
+            if let Some(v) = interation_queue.pop_first() {
+                ongoing_interactions.add(v);
+            }
+        }
 
         if agent.get_mut_action().is_none() {
             agent.new_action();
@@ -226,11 +324,9 @@ fn agent_frame(
                 ActionState::CREATED => {
                     v.update_state();
                     let seller = knowledge.get_knowlegde();
-                    interaction_writer.send(AgentInteraction {
-                        source: entity,
-                        target: seller,
-                        trade: Some(Trade::new(&v.item, v.qty)),
-                    });
+                    let mut interaction = AgentInteraction::new(entity, seller);
+                    interaction.trade = Some(Trade::new(&v.item, v.qty));
+                    ongoing_interactions.add(interaction)
                 }
                 _ => {}
             },
@@ -313,9 +409,9 @@ fn event_completion(
 
 fn event_interaction(
     mut interaction_reader: EventReader<AgentInteraction>,
-    mut interaction_queue: ResMut<InteractionQueue>,
+    mut interaction_queue: ResMut<OngoingInteractionsQueue>,
     mut action_completed_writer: EventWriter<ActionCompleted>,
-    mut agent_query: Query<&mut Agent>,
+    mut agent_query: Query<(&mut Agent, &mut AgentInteractionQueue)>,
 ) {
     for event in interaction_reader.read() {
         if agent_query.get_mut(event.target).is_err() {
@@ -328,7 +424,7 @@ fn event_interaction(
 
         println!("Start event {:?}", event);
 
-        let mut target_agent = agent_query.get_mut(event.target).unwrap();
+        let (mut target_agent, mut agent_interaction_queue) = agent_query.get_mut(event.target).unwrap();
 
         if let Some(trade) = &event.trade {
             if let Some(action) = target_agent.get_mut_action() {
@@ -351,11 +447,11 @@ fn event_interaction(
                             }
                             updated_trade.price = Some(updated_trade.qty * 3);
 
-                            interaction_queue.add(AgentInteraction {
-                                source: event.target,
-                                target: event.source,
-                                trade: Some(updated_trade),
-                            });
+                            interaction_queue.add(AgentInteraction::new_with_trade(
+                                event.target,
+                                event.source,
+                                Some(updated_trade),
+                            ));
                         }
                         TradeStatus::DONE => {
                             println!("Seller received {:?}", event);
@@ -375,6 +471,8 @@ fn event_interaction(
                                 target: event.source,
                                 trade: Some(trade.clone()),
                             });
+
+                            agent_interaction_queue.free();
                         }
                     }
                 } else if let Action::BUY(buy_action) = action {
@@ -403,8 +501,14 @@ fn event_interaction(
                             action_completed_writer.send(ActionCompleted {
                                 entity: event.target,
                             });
+
+                            agent_interaction_queue.free();
                         }
                     }
+                } else {
+                    panic!(
+                        "Chegou evento de trade, mas o target_agent nao esta nem SELL nem BUY !! "
+                    );
                 }
             }
         }

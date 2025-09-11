@@ -2,11 +2,29 @@ use bevy::prelude::{Entity, Event};
 
 use crate::core::item::ItemEnum;
 
-#[derive(Event, Debug)]
+#[derive(Event, Debug, Clone)]
 pub struct AgentInteraction {
     pub source: Entity,
     pub target: Entity,
     pub trade: Option<Trade>,
+}
+
+impl AgentInteraction {
+    pub fn new(source: Entity, target: Entity) -> Self {
+        Self {
+            source,
+            target,
+            trade: None,
+        }
+    }
+
+    pub fn new_with_trade(source: Entity, target: Entity, trade: Option<Trade>) -> Self {
+        Self {
+            source,
+            target,
+            trade,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
