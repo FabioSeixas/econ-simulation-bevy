@@ -4,11 +4,6 @@ use rand::Rng;
 
 pub trait Role: Sync + Send + std::fmt::Debug {
     fn get_name(&self) -> &str;
-
-    // fn tasks(&self) -> &Vec<Task>;
-    // fn tasks_mut(&mut self) -> &mut Vec<Task>; // mutable access
-    // fn get_next_task(&mut self, buf: &mut Task);
-    // fn get_next_task(&self) -> Box<dyn Task>;
     fn get_next_task(&self) -> Option<&dyn Task>;
     fn consume_next_task(&mut self) -> Option<Box<dyn Task>>;
     fn calculate_next_task(&mut self);
@@ -89,24 +84,13 @@ impl Role for Seller {
 }
 
 pub fn get_seller_role() -> Box<dyn Role + Send + Sync> {
-    let mut rnd = rand::thread_rng();
-    let max = 500.;
-    let location = [rnd.gen_range(-max..max), rnd.gen_range(-max..max), 0.];
-    Box::new(Seller::new(location))
-    // let mut rng = thread_rng();
-    // match rng.gen_range(0..2) {
-    //     0 => Box::new(Seller),
-    //     _ => Box::new(NoRole),
-    // }
+    // let mut rnd = rand::thread_rng();
+    // let max = 500.;
+    // let location = [rnd.gen_range(-max..max), rnd.gen_range(-max..max), 0.];
+    Box::new(Seller::new([100.0, 100.0, 0.0]))
 }
 
 // not random for now
 pub fn get_random_role() -> Box<dyn Role + Send + Sync> {
     Box::new(NoRole::new())
-
-    // let mut rng = thread_rng();
-    // match rng.gen_range(0..2) {
-    //     0 => Box::new(Seller),
-    //     _ => Box::new(NoRole),
-    // }
 }

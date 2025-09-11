@@ -4,7 +4,7 @@ pub struct Item {
                       // durability: u8,
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum ItemEnum {
     MONEY,
     MEAT,

@@ -96,6 +96,10 @@ impl BuyAction {
             price_paid: None,
         }
     }
+
+    pub fn set_price_paid(&mut self, p: usize) {
+        self.price_paid = Some(p);
+    }
 }
 
 impl StatefullAction for BuyAction {
@@ -109,7 +113,7 @@ impl StatefullAction for BuyAction {
 
     fn update_state(&mut self) {
         match self.state {
-            ActionState::CREATED => self.state = ActionState::IN_PROGRESS,
+            ActionState::CREATED => self.state = ActionState::WAITING,
             ActionState::WAITING => self.state = ActionState::IN_PROGRESS,
             _ => {}
         }
@@ -203,6 +207,7 @@ impl StatefullAction for SellAction {
         match self.state {
             ActionState::CREATED => self.state = ActionState::IN_PROGRESS,
             ActionState::WAITING => self.state = ActionState::IN_PROGRESS,
+            ActionState::IN_PROGRESS => self.state = ActionState::WAITING, // negotiation happening
             _ => {}
         }
     }

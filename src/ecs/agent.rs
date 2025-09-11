@@ -30,10 +30,12 @@ impl Agent {
     }
 
     pub fn new_seller(entity_id: Entity) -> Self {
-        // let inv = Inventory::new():
+        let mut inv = Inventory::new();
+        inv.add(ItemEnum::MEAT, 50);
+
         Self {
             needs: Needs::new(),
-            inventory: Inventory::new(),
+            inventory: inv,
             queue: VecDeque::new(),
             entity_id,
             role: get_seller_role(),

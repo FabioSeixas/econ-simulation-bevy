@@ -23,7 +23,7 @@ impl Needs {
     }
 
     pub fn is_hungry(&self) -> bool {
-        self.hunger > 500 
+        self.hunger > 200 
     }
 
     pub fn satisfy_hunger(&mut self) {

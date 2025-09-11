@@ -3,11 +3,11 @@ mod ecs;
 
 use bevy::log::*;
 use bevy::prelude::*;
-use ecs::action::buy_action_callback;
-use ecs::action::consume_action_callback;
+use ecs::action::{buy_action_callback, consume_action_callback};
 
 use crate::core::action::*;
 use crate::ecs::agent::*;
+use crate::ecs::interaction::*;
 
 fn main() {
     App::new()
@@ -16,14 +16,77 @@ fn main() {
             ..default()
         }))
         .add_event::<ActionCompleted>()
+        .add_event::<AgentInteraction>()
+        .init_resource::<KnowledgeManagement>()
+        .init_resource::<InteractionQueue>()
         .add_systems(Startup, setup)
         .add_systems(Update, (agent_frame, movement_frame, event_completion))
+        .add_systems(
+            Update,
+            (
+                event_interaction.before(write_outgoing_interactions),
+                write_outgoing_interactions,
+            ),
+        )
         .run();
+}
+
+// type WhereToBuyKnowledge = (Entity, Vec3);
+
+#[derive(Resource, Default)]
+pub struct KnowledgeManagement {
+    // knowledge: HashMap<Entity, Vec<WhereToBuyKnowledge>>,
+    seller: Vec<Entity>,
+}
+
+impl KnowledgeManagement {
+    // pub fn add(&mut self, entity: Entity, item: WhereToBuyKnowledge) {
+    //     match self.knowledge.get_mut(&entity) {
+    //         None => {
+    //             self.knowledge.insert(entity, vec![item]);
+    //         }
+    //         Some(v) => v.push(item),
+    //     }
+    // }
+    pub fn add(&mut self, entity: Entity) {
+        self.seller = vec![entity];
+    }
+
+    pub fn get_knowlegde(&self) -> Entity {
+        self.seller[0]
+    }
 }
 
 #[derive(Event)]
 struct ActionCompleted {
     pub entity: Entity,
+}
+
+#[derive(Resource, Default)]
+pub struct InteractionQueue {
+    pub interactions: Vec<AgentInteraction>,
+}
+
+impl InteractionQueue {
+    pub fn add(&mut self, event: AgentInteraction) {
+        self.interactions.push(event);
+        println!("interation added to the qeueue");
+    }
+
+    pub fn take(&mut self) -> Vec<AgentInteraction> {
+        std::mem::take(&mut self.interactions)
+    }
+}
+
+fn write_outgoing_interactions(
+    mut interaction_writer: EventWriter<AgentInteraction>,
+    mut interaction_queue: ResMut<InteractionQueue>,
+) {
+    let events_to_send = interaction_queue.take();
+    println!("events_to_send: {:?}", events_to_send);
+    for event in events_to_send {
+        interaction_writer.send(event);
+    }
 }
 
 #[derive(Component)]
@@ -67,6 +130,7 @@ fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+    mut knowledge: ResMut<KnowledgeManagement>,
 ) {
     commands.spawn(Camera2d);
 
@@ -92,32 +156,36 @@ fn setup(
             Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
             AnimationConfig::new(),
         ));
+
+        knowledge.add(entity_id);
     }
 
-    // for _ in 0..10 {
-    //     let entity_id = commands.spawn_empty().id();
-    //
-    //     commands.entity(entity_id).insert((
-    //         Sprite {
-    //             image: texture.clone(),
-    //             texture_atlas: Some(TextureAtlas {
-    //                 layout: texture_atlas_layout.clone(),
-    //                 index: 0,
-    //             }),
-    //             ..default()
-    //         },
-    //         Agent::new(entity_id),
-    //         Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
-    //         AnimationConfig::new(),
-    //     ));
-    // }
+    for _ in 0..1 {
+        let entity_id = commands.spawn_empty().id();
+
+        commands.entity(entity_id).insert((
+            Sprite {
+                image: texture.clone(),
+                texture_atlas: Some(TextureAtlas {
+                    layout: texture_atlas_layout.clone(),
+                    index: 0,
+                }),
+                ..default()
+            },
+            Agent::new(entity_id),
+            Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
+            AnimationConfig::new(),
+        ));
+    }
 }
 
 fn agent_frame(
     mut query: Query<(Entity, &mut Agent), With<Agent>>,
     mut commands: Commands,
     mut action_completed_writer: EventWriter<ActionCompleted>,
+    mut interaction_writer: EventWriter<AgentInteraction>,
     time: Res<Time>,
+    knowledge: Res<KnowledgeManagement>,
 ) {
     for (entity, mut agent) in &mut query {
         agent.frame_update();
@@ -157,8 +225,12 @@ fn agent_frame(
                 // ActionState::WAITING => {}
                 ActionState::CREATED => {
                     v.update_state();
-                    v.price_paid = Some(3);
-                    action_completed_writer.send(ActionCompleted { entity });
+                    let seller = knowledge.get_knowlegde();
+                    interaction_writer.send(AgentInteraction {
+                        source: entity,
+                        target: seller,
+                        trade: Some(Trade::new(&v.item, v.qty)),
+                    });
                 }
                 _ => {}
             },
@@ -234,6 +306,106 @@ fn event_completion(
             Action::CONSUME(v) => {
                 consume_action_callback(&mut agent, &v);
                 agent.complete_current_action();
+            }
+        }
+    }
+}
+
+fn event_interaction(
+    mut interaction_reader: EventReader<AgentInteraction>,
+    mut interaction_queue: ResMut<InteractionQueue>,
+    mut action_completed_writer: EventWriter<ActionCompleted>,
+    mut agent_query: Query<&mut Agent>,
+) {
+    for event in interaction_reader.read() {
+        if agent_query.get_mut(event.target).is_err() {
+            warn!(
+                "ActionCompleted event for entity {:?}, but it has no Agent component!",
+                event.target
+            );
+            continue;
+        }
+
+        println!("Start event {:?}", event);
+
+        let mut target_agent = agent_query.get_mut(event.target).unwrap();
+
+        if let Some(trade) = &event.trade {
+            if let Some(action) = target_agent.get_mut_action() {
+                if let Action::SELL(sell_action) = action {
+                    match trade.get_status() {
+                        TradeStatus::NEGOTIATION => {
+                            println!("Seller received {:?}", event);
+                            sell_action.update_state();
+
+                            let mut updated_trade = trade.clone();
+                            let seller_amount = target_agent.inventory.get_qty(trade.item);
+
+                            if seller_amount == 0 {
+                                // todo: complete action with failed
+                                continue;
+                            }
+
+                            if seller_amount < trade.qty {
+                                updated_trade.qty = seller_amount;
+                            }
+                            updated_trade.price = Some(updated_trade.qty * 3);
+
+                            interaction_queue.add(AgentInteraction {
+                                source: event.target,
+                                target: event.source,
+                                trade: Some(updated_trade),
+                            });
+                        }
+                        TradeStatus::DONE => {
+                            println!("Seller received {:?}", event);
+                            if trade.price.is_none() {
+                                panic!("Trade status DONE without price")
+                            }
+
+                            sell_action.update_state();
+
+                            target_agent.inventory.remove(trade.item, trade.qty);
+                            target_agent
+                                .inventory
+                                .add(core::item::ItemEnum::MONEY, trade.price.unwrap());
+
+                            interaction_queue.add(AgentInteraction {
+                                source: event.target,
+                                target: event.source,
+                                trade: Some(trade.clone()),
+                            });
+                        }
+                    }
+                } else if let Action::BUY(buy_action) = action {
+                    match trade.get_status() {
+                        TradeStatus::NEGOTIATION => {
+                            println!("Buyer received {:?}", event);
+                            if trade.price.is_none() {
+                                panic!("Buyer do not received price from seller")
+                            }
+
+                            let mut updated_trade = trade.clone();
+                            // TODO: handle when buyer do not have enought money. Decrease qty.
+
+                            updated_trade.buyer_accepted();
+                            buy_action.set_price_paid(trade.price.unwrap());
+
+                            interaction_queue.add(AgentInteraction {
+                                source: event.target,
+                                target: event.source,
+                                trade: Some(updated_trade),
+                            });
+                        }
+                        TradeStatus::DONE => {
+                            println!("Buyer received {:?}", event);
+                            buy_action.price_paid = trade.price;
+                            action_completed_writer.send(ActionCompleted {
+                                entity: event.target,
+                            });
+                        }
+                    }
+                }
             }
         }
     }

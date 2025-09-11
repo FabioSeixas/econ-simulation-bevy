@@ -10,12 +10,12 @@ Playing around with Bevy
   - [x] add "No Role" role. The default task is walking around
   - [x] Agent calls role to get next task and actions
 - [ ] add "Seller" role
-  - [ ] The default task is selling (using duration)
-  - [ ] At setup add a lot of MEAT item for this agent
+  - [x] The default task is selling (using duration)
+  - [x] At setup add a lot of MEAT item for this agent
   - [ ] Interaction between agents
-    - [ ] agent with buy action start interaction (send event to seller agent)
+    - [x] agent with buy action start interaction (send event to seller agent)
     - [ ] agent seller receive the event and add it to some internal management where all interactions stay (so multiple buyers can be handled by a single seller)
-    - [ ] agent seller send event back to buyer. And so on until trade is done.
+    - [x] agent seller send event back to buyer. And so on until trade is done.
 
 ### Next moves (old)
 
