@@ -7,6 +7,7 @@ pub struct AgentInteraction {
     pub source: Entity,
     pub target: Entity,
     pub trade: Option<Trade>,
+    failed: bool,
 }
 
 impl AgentInteraction {
@@ -15,6 +16,7 @@ impl AgentInteraction {
             source,
             target,
             trade: None,
+            failed: false,
         }
     }
 
@@ -23,7 +25,16 @@ impl AgentInteraction {
             source,
             target,
             trade,
+            failed: false,
         }
+    }
+
+    pub fn is_failed(&self) -> bool {
+        self.failed
+    }
+
+    pub fn set_failed(&mut self) {
+        self.failed = true
     }
 }
 

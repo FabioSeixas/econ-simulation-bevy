@@ -1,13 +1,10 @@
-use crate::{
-    core::{
-        action::*,
-        inventory::*,
-        item::ItemEnum,
-        needs::*,
-        role::{get_random_role, get_seller_role, Role},
-        task::*,
-    },
-    AgentInteraction,
+use crate::core::{
+    action::*,
+    inventory::*,
+    item::ItemEnum,
+    needs::*,
+    role::{get_random_role, get_seller_role, Role},
+    task::*,
 };
 use bevy::prelude::*;
 use std::collections::VecDeque;
@@ -19,7 +16,6 @@ pub struct Agent {
     pub inventory: Inventory,
     action_queue: VecDeque<Action>,
     pub role: Box<dyn Role + Send + Sync>,
-    interaction_queue: VecDeque<AgentInteraction>,
 }
 
 impl Agent {
@@ -28,7 +24,6 @@ impl Agent {
             needs: Needs::new(),
             inventory: Inventory::new(),
             action_queue: VecDeque::new(),
-            interaction_queue: VecDeque::new(),
             entity_id,
             role: get_random_role(),
         }
@@ -42,13 +37,12 @@ impl Agent {
             needs: Needs::new(),
             inventory: inv,
             action_queue: VecDeque::new(),
-            interaction_queue: VecDeque::new(),
             entity_id,
             role: get_seller_role(),
         }
     }
 
-    pub fn complete_current_action(&mut self) {
+    pub fn pop_current_action(&mut self) {
         let completed_action = self.action_queue.pop_front();
         println!("action completed. {:?}", completed_action);
         println!("Current Inventory: {:?}", self.inventory);
