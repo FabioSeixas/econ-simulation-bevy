@@ -54,6 +54,8 @@ impl Agent {
 
     pub fn new_action(&mut self) {
         if self.needs.is_hungry() {
+
+            println!("deal_with_hungry");
             return self.deal_with_hungry();
         }
 
