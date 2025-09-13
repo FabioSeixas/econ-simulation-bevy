@@ -8,6 +8,8 @@ use bevy::prelude::*;
 use ecs::action::{buy_action_callback, consume_action_callback};
 
 use crate::core::action::*;
+use crate::core::item::ItemEnum;
+use crate::core::location::Location;
 use crate::ecs::agent::*;
 use crate::ecs::interaction::*;
 
@@ -23,8 +25,17 @@ fn main() {
         .init_resource::<OngoingInteractionsQueue>()
         .init_resource::<NewInteractionsRequests>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (agent_frame, movement_frame, action_completion))
+        .add_systems(Update, (agent_frame, action_completion))
         .add_systems(Update, send_new_interactions_requests_to_agents)
+        .add_systems(
+            Update,
+            (
+                handle_consuming_action,
+                handle_selling_action,
+                handle_walking_action,
+                handle_buy_action
+            ),
+        )
         .add_systems(
             Update,
             (
@@ -173,10 +184,20 @@ fn send_new_interactions_requests_to_agents(
     }
 }
 
-#[derive(Component)]
-pub struct Walking {
-    pub destination: Vec3,
-}
+#[derive(Component, Default)]
+pub struct Idle;
+
+#[derive(Component, Default)]
+pub struct Walking;
+
+#[derive(Component, Default)]
+pub struct Consuming;
+
+#[derive(Component, Default)]
+pub struct Buying;
+
+#[derive(Component, Default)]
+pub struct Selling;
 
 #[derive(Component)]
 struct AnimationConfig {
@@ -241,12 +262,13 @@ fn setup(
             Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
             AnimationConfig::new(),
             AgentInteractionQueue::new(),
+            Idle {},
         ));
 
         knowledge.add(entity_id);
     }
 
-    for _ in 0..500 {
+    for _ in 0..50 {
         let entity_id = commands.spawn_empty().id();
 
         commands.entity(entity_id).insert((
@@ -262,17 +284,25 @@ fn setup(
             Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
             AnimationConfig::new(),
             AgentInteractionQueue::new(),
+            Idle {},
         ));
     }
 }
 
+fn add_action_marker<T: Component + Default>(commands: &mut Commands, entity: Entity) {
+    commands.entity(entity).insert(T::default());
+    commands.entity(entity).remove::<Idle>();
+}
+
+fn remove_action_marker<T: Component + Default>(commands: &mut Commands, entity: Entity) {
+    commands.entity(entity).remove::<T>();
+    commands.entity(entity).insert(Idle::default());
+}
+
 fn agent_frame(
-    mut query: Query<(Entity, &mut AgentInteractionQueue, &mut Agent), With<Agent>>,
+    mut query: Query<(Entity, &mut AgentInteractionQueue, &mut Agent), With<Idle>>,
     mut commands: Commands,
-    mut action_completed_writer: EventWriter<ActionCompleted>,
     mut ongoing_interactions: ResMut<OngoingInteractionsQueue>,
-    time: Res<Time>,
-    knowledge: Res<KnowledgeManagement>,
 ) {
     for (entity, mut interation_queue, mut agent) in &mut query {
         agent.frame_update();
@@ -290,75 +320,35 @@ fn agent_frame(
 
         let action = agent.get_mut_action().unwrap();
         match action {
-            Action::Walk(v) => match v.current_state() {
-                // ActionState::COMPLETED => {
-                //     agent.complete_current_action();
-                // }
-                // ActionState::IN_PROGRESS => {}
-                // ActionState::WAITING => {}
-                ActionState::CREATED => {
-                    v.update_state();
-                    let destination = v.get_destination();
-
-                    commands.entity(entity).insert(Walking {
-                        destination: Vec3 {
-                            x: destination[0],
-                            y: destination[1],
-                            z: destination[2],
-                        },
-                    });
-                }
-                _ => {}
-            },
-            Action::BUY(v) => match v.current_state() {
-                // ActionState::COMPLETED => {
-                //     buy_action_callback(agent, *v);
-                // }
-                // ActionState::IN_PROGRESS => {}
-                // ActionState::WAITING => {}
-                ActionState::CREATED => {
-                    v.update_state();
-                    let seller = knowledge.get_knowlegde();
-                    let mut interaction = AgentInteraction::new(entity, seller);
-                    interaction.trade = Some(Trade::new(&v.item, v.qty));
-                    ongoing_interactions.add(interaction)
-                }
-                _ => {}
-            },
-            Action::SELL(v) => match v.current_state() {
-                ActionState::COMPLETED => {}
-                ActionState::IN_PROGRESS => {
-                    if v.get_resting_duration() <= 0. {
-                        action_completed_writer.send(ActionCompleted::new(entity));
-                        v.complete();
-                    } else {
-                        println!("happily selling, {:?}", v.get_resting_duration());
-                        v.progress(time.delta_secs());
-                    }
-                }
-                ActionState::WAITING => {}
-                ActionState::CREATED => {
-                    v.update_state();
-                }
-                _ => {}
-            },
-            Action::CONSUME(v) => match v.current_state() {
-                ActionState::COMPLETED => {}
-                ActionState::IN_PROGRESS => {
-                    if v.get_resting_duration() <= 0. {
-                        action_completed_writer.send(ActionCompleted::new(entity));
-                        v.complete();
-                    } else {
-                        println!("consuming, {:?}", v.get_resting_duration());
-                        v.progress(time.delta_secs());
-                    }
-                }
-                ActionState::WAITING => {}
-                ActionState::CREATED => {
-                    v.update_state();
-                }
-                _ => {}
-            },
+            Action::Walk(_) => {
+                add_action_marker::<Walking>(&mut commands, entity);
+            }
+            Action::BUY(_) => {
+                add_action_marker::<Buying>(&mut commands, entity);
+            }
+            Action::SELL(_) => {
+                add_action_marker::<Selling>(&mut commands, entity);
+            }
+            // Action::SELL(v) => match v.current_state() {
+            //     ActionState::COMPLETED => {}
+            //     ActionState::IN_PROGRESS => {
+            //         if v.get_resting_duration() <= 0. {
+            //             action_completed_writer.send(ActionCompleted::new(entity));
+            //             v.complete();
+            //         } else {
+            //             println!("happily selling, {:?}", v.get_resting_duration());
+            //             v.progress(time.delta_secs());
+            //         }
+            //     }
+            //     ActionState::WAITING => {}
+            //     ActionState::CREATED => {
+            //         v.update_state();
+            //     }
+            //     _ => {}
+            // },
+            Action::CONSUME(_) => {
+                add_action_marker::<Consuming>(&mut commands, entity);
+            }
         }
     }
 }
@@ -519,31 +509,135 @@ fn process_ongoing_interaction(
     }
 }
 
-fn movement_frame(
+fn handle_buy_action(
+    mut query: Query<(Entity, &mut Agent), With<Consuming>>,
+    mut commands: Commands,
+    knowledge: Res<KnowledgeManagement>,
+    mut ongoing_interactions: ResMut<OngoingInteractionsQueue>,
+) {
+    for (entity, mut agent) in &mut query {
+        // limit borrow scope
+        let action_state_and_data = if let Some(action) = agent.get_mut_action() {
+            if let Action::BUY(buy) = action {
+                Some((buy.current_state(), buy.item.clone(), buy.qty, buy.price_paid))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if let Some((state, item, qty, price_paid)) = action_state_and_data {
+            match state {
+                ActionState::CREATED => {
+                    // now we need to mutate the buy again
+                    if let Some(Action::BUY(buy)) = agent.get_mut_action() {
+                        buy.update_state();
+                        let seller = knowledge.get_knowlegde();
+                        let mut interaction = AgentInteraction::new(entity, seller);
+                        interaction.trade = Some(Trade::new(&item, qty));
+                        ongoing_interactions.add(interaction);
+                    }
+                    add_action_marker::<Buying>(&mut commands, entity);
+                }
+                ActionState::COMPLETED => {
+                    if price_paid.is_none() {
+                        panic!("callback called without price paid")
+                    } else {
+                        agent.inventory.add(item.clone(), qty);
+                        agent.inventory.remove(ItemEnum::MONEY, price_paid.unwrap());
+                    }
+
+                    agent.pop_current_action();
+                    remove_action_marker::<Buying>(&mut commands, entity);
+                }
+                ActionState::FAILED => {
+                    // this will make the agent try again
+                    agent.pop_current_action();
+                    remove_action_marker::<Buying>(&mut commands, entity);
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+fn handle_consuming_action(
+    mut query: Query<(Entity, &mut Agent), With<Consuming>>,
+    time: Res<Time>,
+    mut commands: Commands,
+) {
+    for (entity, mut agent) in &mut query {
+        if let Some(action) = agent.get_mut_action() {
+            if let Action::CONSUME(consume) = action {
+                if consume.get_resting_duration() <= 0. {
+                    agent.pop_current_action();
+                    remove_action_marker::<Consuming>(&mut commands, entity);
+                } else {
+                    println!("consuming, {:?}", consume.get_resting_duration());
+                    consume.progress(time.delta_secs());
+                }
+            }
+        }
+    }
+}
+
+fn handle_selling_action(
+    mut query: Query<(Entity, &mut Agent), With<Consuming>>,
+    time: Res<Time>,
+    mut commands: Commands,
+) {
+    for (entity, mut agent) in &mut query {
+        if let Some(action) = agent.get_mut_action() {
+            if let Action::SELL(sell) = action {
+                if sell.get_resting_duration() <= 0. {
+                    agent.pop_current_action();
+                    remove_action_marker::<Selling>(&mut commands, entity);
+                } else {
+                    println!("happily selling, {:?}", sell.get_resting_duration());
+                    sell.progress(time.delta_secs());
+                }
+            }
+        }
+    }
+}
+
+fn handle_walking_action(
     mut query: Query<
         (
             Entity,
             &mut Transform,
             &AnimationConfig,
             &mut Sprite,
-            // &mut Agent,
-            &Walking,
+            &mut Agent,
         ),
         With<Walking>,
     >,
     time: Res<Time>,
     mut commands: Commands,
-    mut action_completed_writer: EventWriter<ActionCompleted>,
 ) {
-    for (entity, mut transform, config, mut sprite, walking) in &mut query {
-        if walking.destination.distance(transform.translation) > 50. {
-            let mut direction = (walking.destination - transform.translation).normalize();
-            movement(&mut direction, &mut transform, &config, &mut sprite, &time);
-        } else {
-            println!("action done");
-            commands.entity(entity).remove::<Walking>();
-            action_completed_writer.send(ActionCompleted::new(entity));
+    for (entity, mut transform, config, mut sprite, mut agent) in &mut query {
+        if let Some(action) = agent.get_mut_action() {
+            if let Action::Walk(walk) = action {
+                let destination = location_to_vec3(walk.get_destination());
+                if destination.distance(transform.translation) > 50. {
+                    let mut direction = (destination - transform.translation).normalize();
+                    movement(&mut direction, &mut transform, &config, &mut sprite, &time);
+                } else {
+                    println!("walking done");
+                    agent.pop_current_action();
+                    remove_action_marker::<Walking>(&mut commands, entity);
+                }
+            }
         }
+    }
+}
+
+fn location_to_vec3(location: Location) -> Vec3 {
+    Vec3 {
+        x: location[0],
+        y: location[1],
+        z: location[2],
     }
 }
 

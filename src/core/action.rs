@@ -4,10 +4,11 @@ use rand::Rng;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActionState {
-    CREATED,     // Action is initialized
-    WAITING,     // Waiting for conditions (e.g., resources)
-    IN_PROGRESS, // Currently being executed
-    COMPLETED,   // Action is finished
+    CREATED,   
+    WAITING,    
+    IN_PROGRESS, 
+    COMPLETED,   
+    FAILED,   
 }
 
 #[derive(Debug, Clone)]
@@ -31,6 +32,7 @@ pub trait StatefullAction {
     fn current_state(&self) -> ActionState;
     fn update_state(&mut self);
     fn complete(&mut self);
+    fn failed(&mut self);
     // fn process(&mut self) -> ActionExecution;
 }
 
@@ -78,6 +80,9 @@ impl StatefullAction for Walk {
     fn complete(&mut self) {
         self.state = ActionState::COMPLETED;
     }
+    fn failed(&mut self) {
+        self.state = ActionState::FAILED;
+    }
 
     fn update_state(&mut self) {
         match self.state {
@@ -119,6 +124,10 @@ impl StatefullAction for BuyAction {
 
     fn complete(&mut self) {
         self.state = ActionState::COMPLETED;
+    }
+
+    fn failed(&mut self) {
+        self.state = ActionState::FAILED;
     }
 
     fn update_state(&mut self) {
@@ -169,6 +178,10 @@ impl StatefullAction for ConsumeAction {
         self.state = ActionState::COMPLETED;
     }
 
+    fn failed(&mut self) {
+        self.state = ActionState::FAILED;
+    }
+
     fn update_state(&mut self) {
         match self.state {
             ActionState::CREATED => self.state = ActionState::IN_PROGRESS,
@@ -211,6 +224,10 @@ impl StatefullAction for SellAction {
 
     fn complete(&mut self) {
         self.state = ActionState::COMPLETED;
+    }
+
+    fn failed(&mut self) {
+        self.state = ActionState::FAILED;
     }
 
     fn update_state(&mut self) {
