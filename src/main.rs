@@ -24,17 +24,13 @@ fn main() {
         .init_resource::<OngoingInteractionsQueue>()
         .init_resource::<NewInteractionsRequests>()
         .add_systems(Startup, setup)
+        .add_systems(Update, update_agents)
         .add_systems(Update, handle_idle_agents)
         .add_systems(Update, send_new_interactions_requests_to_agents)
-        .add_systems(
-            Update,
-            (
-                handle_consuming_action,
-                handle_selling_action,
-                handle_walking_action,
-                handle_buy_action,
-            ),
-        )
+        .add_systems(Update, handle_consuming_action)
+        .add_systems(Update, handle_selling_action)
+        .add_systems(Update, handle_walking_action)
+        .add_systems(Update, handle_buy_action)
         .add_systems(
             Update,
             (
@@ -43,6 +39,12 @@ fn main() {
             ),
         )
         .run();
+}
+
+fn update_agents(mut query: Query<&mut Agent, With<Agent>>) {
+    for mut agent in &mut query {
+        agent.frame_update();
+    }
 }
 
 #[derive(Resource, Default)]
@@ -267,7 +269,7 @@ fn setup(
         knowledge.add(entity_id);
     }
 
-    for _ in 0..1 {
+    for _ in 0..500 {
         let entity_id = commands.spawn_empty().id();
 
         commands.entity(entity_id).insert((
@@ -304,7 +306,7 @@ fn handle_idle_agents(
     mut ongoing_interactions: ResMut<OngoingInteractionsQueue>,
 ) {
     for (entity, mut interation_queue, mut agent) in &mut query {
-        agent.frame_update();
+        // agent.frame_update();
 
         if interation_queue.is_free() {
             if let Some(v) = interation_queue.pop_first() {
@@ -318,17 +320,23 @@ fn handle_idle_agents(
         }
 
         let action = agent.get_mut_action().unwrap();
+
+        println!("handle_idle_agents: {:?}", action);
         match action {
             Action::Walk(_) => {
+                println!("adding walk marker");
                 add_action_marker::<Walking>(&mut commands, entity);
             }
             Action::BUY(_) => {
+                println!("adding buy marker");
                 add_action_marker::<Buying>(&mut commands, entity);
             }
             Action::SELL(_) => {
+                println!("adding selling marker");
                 add_action_marker::<Selling>(&mut commands, entity);
             }
             Action::CONSUME(_) => {
+                println!("adding consume marker");
                 add_action_marker::<Consuming>(&mut commands, entity);
             }
         }
@@ -392,16 +400,16 @@ fn process_ongoing_interaction(
         let (mut target_agent, mut agent_interaction_queue) =
             agent_query.get_mut(event.target).unwrap();
 
-        if event.is_failed() {
-            if let Some(_) = target_agent.get_mut_action() {
-                let mut completion = ActionCompleted::new(event.target);
-                completion.set_failed();
-                action_completed_writer.send(completion);
-            }
-
-            agent_interaction_queue.free();
-            continue;
-        }
+        // if event.is_failed() {
+        //     if let Some(_) = target_agent.get_mut_action() {
+        //         let mut completion = ActionCompleted::new(event.target);
+        //         completion.set_failed();
+        //         action_completed_writer.send(completion);
+        //     }
+        //
+        //     agent_interaction_queue.free();
+        //     continue;
+        // }
 
         if let Some(trade) = &event.trade {
             if let Some(action) = target_agent.get_mut_action() {
@@ -456,6 +464,12 @@ fn process_ongoing_interaction(
                     match trade.get_status() {
                         TradeStatus::NEGOTIATION => {
                             println!("Buyer received {:?}", event);
+                            if event.is_failed() {
+                                buy_action.failed();
+                                println!("buy action failed");
+                                continue;
+                            }
+
                             if trade.price.is_none() {
                                 panic!("Buyer do not received price from seller")
                             }
@@ -475,11 +489,13 @@ fn process_ongoing_interaction(
                         TradeStatus::DONE => {
                             println!("Buyer received {:?}", event);
                             buy_action.price_paid = trade.price;
-                            action_completed_writer.send(ActionCompleted::new(event.target));
+                            buy_action.complete();
+                            // action_completed_writer.send(ActionCompleted::new(event.target));
                             agent_interaction_queue.free();
                         }
                     }
                 } else {
+                    println!("trade event arrive but target agent is neither sell or buy");
                     let mut interaction_feedback =
                         AgentInteraction::new(event.target, event.source);
                     interaction_feedback.set_failed();
@@ -492,12 +508,13 @@ fn process_ongoing_interaction(
 }
 
 fn handle_buy_action(
-    mut query: Query<(Entity, &mut Agent), With<Consuming>>,
+    mut query: Query<(Entity, &mut Agent), With<Buying>>,
     mut commands: Commands,
     knowledge: Res<KnowledgeManagement>,
     mut ongoing_interactions: ResMut<OngoingInteractionsQueue>,
 ) {
     for (entity, mut agent) in &mut query {
+        println!("consuming arrived");
         let action_state_and_data = if let Some(action) = agent.get_action() {
             if let Action::BUY(buy) = action {
                 Some((
@@ -513,6 +530,8 @@ fn handle_buy_action(
             None
         };
 
+        println!("action_state_and_data: {:?}", action_state_and_data);
+
         if let Some((state, item, qty, price_paid)) = action_state_and_data {
             match state {
                 ActionState::CREATED => {
@@ -522,16 +541,15 @@ fn handle_buy_action(
                         let mut interaction = AgentInteraction::new(entity, seller);
                         interaction.trade = Some(Trade::new(&item, qty));
                         ongoing_interactions.add(interaction);
-                        add_action_marker::<Buying>(&mut commands, entity);
                     }
                 }
                 ActionState::COMPLETED => {
                     if price_paid.is_none() {
                         panic!("callback called without price paid")
-                    } else {
-                        agent.inventory.add(item.clone(), qty);
-                        agent.inventory.remove(ItemEnum::MONEY, price_paid.unwrap());
                     }
+
+                    agent.inventory.add(item.clone(), qty);
+                    agent.inventory.remove(ItemEnum::MONEY, price_paid.unwrap());
 
                     agent.pop_current_action();
                     remove_action_marker::<Buying>(&mut commands, entity);
@@ -592,7 +610,7 @@ fn handle_consuming_action(
 }
 
 fn handle_selling_action(
-    mut query: Query<(Entity, &mut Agent), With<Consuming>>,
+    mut query: Query<(Entity, &mut Agent), With<Selling>>,
     time: Res<Time>,
     mut commands: Commands,
 ) {

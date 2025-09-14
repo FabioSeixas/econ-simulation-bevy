@@ -53,6 +53,7 @@ impl Agent {
     }
 
     pub fn new_action(&mut self) {
+            println!("new action");
         if self.needs.is_hungry() {
 
             println!("deal_with_hungry");
@@ -63,6 +64,7 @@ impl Agent {
 
         if let Some(v) = self.role.consume_next_task() {
             for action in v.to_actions() {
+                println!("adding action to queue {:?}", action);
                 self.action_queue.push_back(action);
             }
         }

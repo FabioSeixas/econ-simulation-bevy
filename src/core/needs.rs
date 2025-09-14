@@ -23,6 +23,7 @@ impl Needs {
     }
 
     pub fn is_hungry(&self) -> bool {
+        println!("is hungry {:?}", &self);
         self.hunger > 200 
     }
 
