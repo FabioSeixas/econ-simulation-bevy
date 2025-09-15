@@ -18,7 +18,6 @@ fn main() {
             level: Level::DEBUG, // Set minimum level to show debug logs
             ..default()
         }))
-        .add_event::<ActionCompleted>()
         .add_event::<AgentInteraction>()
         .init_resource::<KnowledgeManagement>()
         .init_resource::<OngoingInteractionsQueue>()
@@ -27,10 +26,15 @@ fn main() {
         .add_systems(Update, update_agents)
         .add_systems(Update, handle_idle_agents)
         .add_systems(Update, send_new_interactions_requests_to_agents)
-        .add_systems(Update, handle_consuming_action)
-        .add_systems(Update, handle_selling_action)
-        .add_systems(Update, handle_walking_action)
-        .add_systems(Update, handle_buy_action)
+        .add_systems(
+            Update,
+            (
+                handle_consuming_action,
+                handle_selling_action,
+                handle_walking_action,
+                handle_buy_action,
+            ),
+        )
         .add_systems(
             Update,
             (
@@ -74,29 +78,6 @@ impl KnowledgeManagement {
 
     pub fn get_knowlegde(&self) -> Entity {
         self.seller[0]
-    }
-}
-
-#[derive(Event)]
-struct ActionCompleted {
-    pub entity: Entity,
-    failed: bool,
-}
-
-impl ActionCompleted {
-    pub fn new(entity: Entity) -> Self {
-        Self {
-            entity,
-            failed: false,
-        }
-    }
-
-    pub fn set_failed(&mut self) {
-        self.failed = true
-    }
-
-    pub fn is_failed(&self) -> bool {
-        self.failed
     }
 }
 
@@ -269,7 +250,7 @@ fn setup(
         knowledge.add(entity_id);
     }
 
-    for _ in 0..500 {
+    for _ in 0..10 {
         let entity_id = commands.spawn_empty().id();
 
         commands.entity(entity_id).insert((
@@ -343,53 +324,15 @@ fn handle_idle_agents(
     }
 }
 
-// fn action_completion(
-//     mut action_completed_reader: EventReader<ActionCompleted>,
-//     mut agent_query: Query<&mut Agent>,
-// ) {
-//     for event in action_completed_reader.read() {
-//         if agent_query.get_mut(event.entity).is_err() {
-//             warn!(
-//                 "ActionCompleted event for entity {:?}, but it has no Agent component!",
-//                 event.entity
-//             );
-//             continue;
-//         }
-//
-//         let mut agent = agent_query.get_mut(event.entity).unwrap();
-//
-//         if agent.get_action().is_none() {
-//             continue;
-//         }
-//
-//         let action = agent.get_action().cloned().unwrap();
-//         match action {
-//             Action::Walk(_) => {
-//                 agent.pop_current_action();
-//             }
-//             Action::SELL(_) => {
-//                 agent.pop_current_action();
-//             }
-//             Action::BUY(v) => {
-//                 buy_action_callback(&mut agent, &v, event.is_failed());
-//             }
-//             Action::CONSUME(v) => {
-//                 consume_action_callback(&mut agent, &v, event.is_failed());
-//             }
-//         }
-//     }
-// }
-
 fn process_ongoing_interaction(
     mut interaction_reader: EventReader<AgentInteraction>,
     mut interaction_queue: ResMut<OngoingInteractionsQueue>,
-    mut action_completed_writer: EventWriter<ActionCompleted>,
     mut agent_query: Query<(&mut Agent, &mut AgentInteractionQueue)>,
 ) {
     for event in interaction_reader.read() {
         if agent_query.get_mut(event.target).is_err() {
             warn!(
-                "ActionCompleted event for entity {:?}, but it has no Agent component!",
+                "AgentInteraction event for entity {:?}, but it has no Agent component!",
                 event.target
             );
             continue;
