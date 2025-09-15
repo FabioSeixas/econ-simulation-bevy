@@ -45,9 +45,19 @@ fn main() {
         .run();
 }
 
-fn update_agents(mut query: Query<&mut Agent, With<Agent>>) {
-    for mut agent in &mut query {
+fn update_agents(
+    mut query: Query<(&mut Agent, &mut AgentInteractionQueue), With<Agent>>,
+    mut ongoing_interactions_queue: ResMut<OngoingInteractionsQueue>,
+) {
+    for (mut agent, mut interation_queue) in &mut query {
         agent.frame_update();
+
+        if interation_queue.is_free() {
+            if let Some(v) = interation_queue.pop_first() {
+                println!("Adding interation to ongoing_interactions_queue: {:?}", v);
+                ongoing_interactions_queue.add(v);
+            }
+        }
     }
 }
 
@@ -111,6 +121,7 @@ impl AgentInteractionQueue {
         match self.queue.pop_front() {
             None => None,
             Some(v) => {
+                println!("Locking AgentInteractionQueue, processing interaction: {:?}", &v);
                 self.free = false;
                 Some(v)
             }
@@ -141,10 +152,11 @@ fn write_ongoing_interactions(
     let events_to_send = interaction_queue.take();
 
     if events_to_send.len() > 0 {
-        println!("events_to_send: {:?}", events_to_send);
+        println!("write_ongoing_interactions -> events_to_send: {}", events_to_send.len());
     }
 
     for event in events_to_send {
+        println!("write_ongoing_interactions -> sending: {:?}", event);
         interaction_writer.send(event);
     }
 }
@@ -156,11 +168,12 @@ fn send_new_interactions_requests_to_agents(
     let new_interactions_to_send = new_interactions_requests.take();
 
     if new_interactions_to_send.len() > 0 {
-        println!("events_to_send: {:?}", new_interactions_to_send);
+        println!("new_interactions_to_send: {:?}", new_interactions_to_send);
     }
 
     for (entity, interaction) in new_interactions_to_send {
         if let Ok(mut agent_queue) = query.get_mut(entity) {
+            println!("adding new interaction to agent queue: {:?}", interaction);
             agent_queue.add(interaction);
         }
     }
@@ -281,20 +294,8 @@ fn remove_action_marker<T: Component + Default>(commands: &mut Commands, entity:
     commands.entity(entity).insert(Idle::default());
 }
 
-fn handle_idle_agents(
-    mut query: Query<(Entity, &mut AgentInteractionQueue, &mut Agent), With<Idle>>,
-    mut commands: Commands,
-    mut ongoing_interactions: ResMut<OngoingInteractionsQueue>,
-) {
-    for (entity, mut interation_queue, mut agent) in &mut query {
-        // agent.frame_update();
-
-        if interation_queue.is_free() {
-            if let Some(v) = interation_queue.pop_first() {
-                ongoing_interactions.add(v);
-            }
-        }
-
+fn handle_idle_agents(mut query: Query<(Entity, &mut Agent), With<Idle>>, mut commands: Commands) {
+    for (entity, mut agent) in &mut query {
         if agent.get_mut_action().is_none() {
             agent.new_action();
             continue;
@@ -409,6 +410,7 @@ fn process_ongoing_interaction(
                             println!("Buyer received {:?}", event);
                             if event.is_failed() {
                                 buy_action.failed();
+                                agent_interaction_queue.free();
                                 println!("buy action failed");
                                 continue;
                             }
@@ -441,6 +443,7 @@ fn process_ongoing_interaction(
                     println!("trade event arrive but target agent is neither sell or buy");
                     let mut interaction_feedback =
                         AgentInteraction::new(event.target, event.source);
+                    interaction_feedback.trade = Some(trade.clone());
                     interaction_feedback.set_failed();
                     interaction_queue.add(interaction_feedback);
                     agent_interaction_queue.free();
@@ -454,10 +457,10 @@ fn handle_buy_action(
     mut query: Query<(Entity, &mut Agent), With<Buying>>,
     mut commands: Commands,
     knowledge: Res<KnowledgeManagement>,
-    mut ongoing_interactions: ResMut<OngoingInteractionsQueue>,
+    mut new_interaction_requests: ResMut<NewInteractionsRequests>,
 ) {
     for (entity, mut agent) in &mut query {
-        println!("consuming arrived");
+        println!("buy arrived");
         let action_state_and_data = if let Some(action) = agent.get_action() {
             if let Action::BUY(buy) = action {
                 Some((
@@ -483,7 +486,7 @@ fn handle_buy_action(
                         let seller = knowledge.get_knowlegde();
                         let mut interaction = AgentInteraction::new(entity, seller);
                         interaction.trade = Some(Trade::new(&item, qty));
-                        ongoing_interactions.add(interaction);
+                        new_interaction_requests.add(entity, interaction);
                     }
                 }
                 ActionState::COMPLETED => {
