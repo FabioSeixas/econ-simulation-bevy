@@ -99,7 +99,6 @@ pub struct BuyAction {
     state: ActionState,
     pub item: ItemEnum,
     pub qty: usize,
-    pub price_paid: Option<usize>,
 }
 
 impl BuyAction {
@@ -108,12 +107,7 @@ impl BuyAction {
             state: ActionState::CREATED,
             qty,
             item,
-            price_paid: None,
         }
-    }
-
-    pub fn set_price_paid(&mut self, p: usize) {
-        self.price_paid = Some(p);
     }
 }
 

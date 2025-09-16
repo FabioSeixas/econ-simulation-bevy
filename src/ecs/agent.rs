@@ -9,27 +9,34 @@ use crate::core::{
 use bevy::prelude::*;
 use std::collections::VecDeque;
 
+#[derive(Copy, Clone, Debug, PartialEq, Default)]
+pub enum AgentState {
+    #[default]
+    ExecutingPlan, // The agent is following its own goals (walking, working).
+    HandlingInteraction, // The agent is busy with a request from its queue.
+}
+
 #[derive(Component)]
 pub struct Agent {
-    pub entity_id: Entity,
     pub needs: Needs,
     pub inventory: Inventory,
     action_queue: VecDeque<Action>,
     pub role: Box<dyn Role + Send + Sync>,
+    state: AgentState,
 }
 
 impl Agent {
-    pub fn new(entity_id: Entity) -> Self {
+    pub fn new() -> Self {
         Self {
             needs: Needs::new(),
             inventory: Inventory::new(),
             action_queue: VecDeque::new(),
-            entity_id,
             role: get_random_role(),
+            state: AgentState::ExecutingPlan,
         }
     }
 
-    pub fn new_seller(entity_id: Entity) -> Self {
+    pub fn new_seller() -> Self {
         let mut inv = Inventory::new();
         inv.add(ItemEnum::MEAT, 5000);
 
@@ -37,8 +44,8 @@ impl Agent {
             needs: Needs::new(),
             inventory: inv,
             action_queue: VecDeque::new(),
-            entity_id,
             role: get_seller_role(),
+            state: AgentState::ExecutingPlan,
         }
     }
 
@@ -48,14 +55,17 @@ impl Agent {
         println!("Current Inventory: {:?}", self.inventory);
     }
 
+    pub fn current_state(&self) -> AgentState {
+        self.state
+    }
+
     pub fn satisfy_hungry(&mut self) {
         self.needs.satisfy_hunger();
     }
 
     pub fn new_action(&mut self) {
-            println!("new action");
+        println!("new action");
         if self.needs.is_hungry() {
-
             println!("deal_with_hungry");
             return self.deal_with_hungry();
         }
