@@ -156,7 +156,9 @@ fn send_new_interactions_requests_to_agents(
 }
 
 #[derive(Component, Default)]
-pub struct Walking;
+pub struct Walking {
+    destination: Vec3,
+}
 
 #[derive(Component, Default)]
 pub struct Consuming;
@@ -224,6 +226,7 @@ fn setup(
             Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
             AnimationConfig::new(),
             AgentInteractionQueue::new(),
+            Name::new("the happier seller"),
             Idle {},
         ));
 
@@ -246,6 +249,7 @@ fn setup(
             Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
             AnimationConfig::new(),
             AgentInteractionQueue::new(),
+            Name::new(format!("agent_{}", i)),
             Idle {},
         ));
     }
@@ -279,9 +283,12 @@ fn handle_idle_agents(mut query: Query<(Entity, &mut Agent), With<Idle>>, mut co
 
         // println!("handle_idle_agents: {:?}", action);
         match action {
-            Action::Walk(_) => {
+            Action::Walk(v) => {
                 // println!("adding walk marker");
-                add_marker::<Walking>(&mut commands, entity);
+                commands.entity(entity).insert(Walking {
+                    destination: location_to_vec3(v.get_destination()),
+                });
+                commands.entity(entity).remove::<Idle>();
             }
             Action::BUY(v) => {
                 // println!("adding buy marker");

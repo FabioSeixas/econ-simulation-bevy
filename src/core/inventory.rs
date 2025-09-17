@@ -15,9 +15,7 @@ impl Inventory {
         items.insert(ItemEnum::WATER, 100);
         items.insert(ItemEnum::MONEY, 50);
 
-        Self {
-            items
-        }
+        Self { items }
     }
 
     pub fn new() -> Self {
@@ -25,9 +23,7 @@ impl Inventory {
 
         items.insert(ItemEnum::MONEY, 50);
 
-        Self {
-            items
-        }
+        Self { items }
     }
 
     pub fn add(&mut self, id: ItemEnum, qty: usize) {
@@ -46,6 +42,13 @@ impl Inventory {
             None => 0,
             Some(current_qty) => *current_qty,
         }
+    }
+
+    pub fn list(&self) -> Vec<(ItemEnum, usize)> {
+        self.items
+            .iter()
+            .map(|(item, qty)| (item.clone(), qty.clone()))
+            .collect()
     }
 
     pub fn remove(&mut self, id: ItemEnum, qty: usize) -> usize {

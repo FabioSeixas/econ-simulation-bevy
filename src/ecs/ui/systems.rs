@@ -1,4 +1,7 @@
+use bevy_egui::{egui, EguiContexts};
+
 use bevy::{
+    core::Name,
     ecs::{
         entity::Entity,
         query::With,
@@ -11,7 +14,15 @@ use bevy::{
     window::{PrimaryWindow, Window},
 };
 
-use crate::ecs::ui::resources::SelectedAgent;
+use crate::{ecs::{trade::components::Selling, ui::resources::SelectedAgent}, Consuming};
+use crate::{
+    ecs::{
+        agent::*,
+        components::Idle,
+        trade::components::{Buying, TradeNegotiation},
+    },
+    AgentInteractionQueue, Walking,
+};
 
 pub fn agent_selection_system(
     mut selected_agent: ResMut<SelectedAgent>,
@@ -65,4 +76,91 @@ pub fn agent_selection_system(
             selected_agent.entity = None;
         }
     }
+}
+
+pub fn agent_ui_panel_system(
+    mut contexts: EguiContexts,
+    selected_agent: Res<SelectedAgent>,
+    // We need queries for all the data we want to display
+    agent_query: Query<(&Agent, &Name, &AgentInteractionQueue)>,
+    // Queries for action/state components
+    idle_query: Query<&Idle>,
+    walking_query: Query<&Walking>,
+    buying_query: Query<&Buying>,
+    selling_query: Query<&Selling>,
+    consuming_query: Query<&Consuming>,
+    trade_query: Query<&TradeNegotiation>, // The active interaction component
+) {
+    // Check if an agent is selected. If not, we don't draw anything.
+    let Some(selected_entity) = selected_agent.entity else {
+        return;
+    };
+
+    // Attempt to get the main agent data. If this fails, the entity might have been despawned.
+    let Ok((agent, name, interaction_queue)) = agent_query.get(selected_entity) else {
+        return;
+    };
+
+    // --- This is where we define the UI panel ---
+    egui::SidePanel::right("agent_info_panel")
+        .default_width(250.0)
+        .show(contexts.ctx_mut(), |ui| {
+            ui.heading(format!("Inspector: {}", name.as_str()));
+            ui.separator();
+
+            // --- Display Current Status ---
+            ui.label("CURRENT STATUS:");
+            let status_text = if idle_query.get(selected_entity).is_ok() {
+                "State: Idle 😴".to_string()
+            } else if let Ok(walking) = walking_query.get(selected_entity) {
+                format!(
+                    "State: Walking to [{:.1}, {:.1}] 🚶",
+                    walking.destination.x, walking.destination.y
+                )
+            } else if buying_query.get(selected_entity).is_ok() {
+                "State: Preparing to Buy 🛒".to_string()
+            } else if selling_query.get(selected_entity).is_ok() {
+                "State: Selling 💰".to_string()
+            } else if consuming_query.get(selected_entity).is_ok() {
+                "State: Consuming 🍔".to_string()
+            } else if let Ok(trade) = trade_query.get(selected_entity) {
+                format!("State: Trading ({:?}) 🤝", trade)
+            } else {
+                "State: Unknown".to_string()
+            };
+            ui.label(status_text);
+            ui.separator();
+
+            // --- Display Agent's Role & Needs ---
+            ui.label("DETAILS:");
+            ui.label(format!("Role: {:?}", agent.role));
+            ui.label(format!("Hunger: {:.1}/100", agent.needs.hunger));
+            ui.label(format!("Thirst: {:.1}/100", agent.needs.thirst));
+            ui.separator();
+
+            // --- Display Inventory ---
+            ui.label("INVENTORY:");
+            let items_list = &agent.inventory.list();
+            for (item, quantity) in items_list {
+                ui.label(format!("- {} (x{})", format!("{:?}", item), quantity));
+            }
+            if items_list.is_empty() {
+                ui.label("- Empty");
+            }
+            ui.separator();
+
+            // --- Display Next Action in Plan ---
+            ui.label("ACTION PLAN:");
+            if let Some(next_action) = agent.get_action() {
+                // Assuming you still have this for planning
+                ui.label(format!("- {:?}", next_action));
+            } else {
+                ui.label("- No current plan");
+            }
+            ui.separator();
+
+            // --- Display Interaction Queue ---
+            ui.label("INTERACTION QUEUE:");
+            ui.label(format!("Current size: {:?}", interaction_queue.len()));
+        });
 }
