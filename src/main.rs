@@ -233,7 +233,7 @@ fn setup(
         knowledge.add(entity_id);
     }
 
-    for _ in 0..10 {
+    for i in 0..10 {
         let entity_id = commands.spawn_empty().id();
 
         commands.entity(entity_id).insert((
