@@ -9,20 +9,12 @@ use crate::core::{
 use bevy::prelude::*;
 use std::collections::VecDeque;
 
-#[derive(Copy, Clone, Debug, PartialEq, Default)]
-pub enum AgentState {
-    #[default]
-    ExecutingPlan, // The agent is following its own goals (walking, working).
-    HandlingInteraction, // The agent is busy with a request from its queue.
-}
-
 #[derive(Component)]
 pub struct Agent {
     pub needs: Needs,
     pub inventory: Inventory,
     action_queue: VecDeque<Action>,
     pub role: Box<dyn Role + Send + Sync>,
-    state: AgentState,
 }
 
 impl Agent {
@@ -32,7 +24,6 @@ impl Agent {
             inventory: Inventory::new(),
             action_queue: VecDeque::new(),
             role: get_random_role(),
-            state: AgentState::ExecutingPlan,
         }
     }
 
@@ -45,7 +36,6 @@ impl Agent {
             inventory: inv,
             action_queue: VecDeque::new(),
             role: get_seller_role(),
-            state: AgentState::ExecutingPlan,
         }
     }
 
@@ -53,10 +43,6 @@ impl Agent {
         let completed_action = self.action_queue.pop_front();
         // println!("action completed. {:?}", completed_action);
         // println!("Current Inventory: {:?}", self.inventory);
-    }
-
-    pub fn current_state(&self) -> AgentState {
-        self.state
     }
 
     pub fn satisfy_hungry(&mut self) {
@@ -103,7 +89,7 @@ impl Agent {
             return;
         }
 
-        for action in BuyTask::new(ItemEnum::MEAT, 1, [100.0, 100.0, 0.0]).to_actions() {
+        for action in BuyTask::new(ItemEnum::MEAT, 1, [100., 100., 0.]).to_actions() {
             self.action_queue.push_back(action);
         }
     }

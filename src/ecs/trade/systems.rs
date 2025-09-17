@@ -3,11 +3,10 @@ use bevy::prelude::*;
 use crate::{
     core::item::ItemEnum,
     ecs::{
-        agent::Agent,
-        trade::{
+        agent::Agent, components::Interacting, trade::{
             components::{Buying, Selling, TradeInteraction, TradeNegotiation, TradeRole},
             events::{OfferAgreed, OfferMade, TradeFinalized},
-        },
+        }
     },
     Idle,
 };
@@ -15,7 +14,7 @@ use crate::{
 pub fn seller_makes_offer_system(
     mut seller_query: Query<
         (&Agent, &mut TradeNegotiation),
-        (With<Selling>, Added<TradeNegotiation>),
+        (With<Selling>, Added<TradeNegotiation>, With<Interacting>),
     >,
     mut offer_made_writer: EventWriter<OfferMade>,
     mut trade_finalized_writer: EventWriter<TradeFinalized>,
@@ -47,7 +46,7 @@ pub fn seller_makes_offer_system(
 pub fn buyer_evaluates_offer_system(
     mut buyer_query: Query<
         (Entity, &Agent, &mut TradeNegotiation),
-        (With<Buying>, With<TradeNegotiation>),
+        (With<Buying>, With<TradeNegotiation>, With<Interacting>),
     >,
     mut offer_agreed_writer: EventWriter<OfferAgreed>,
     mut offer_made_reader: EventReader<OfferMade>,
@@ -77,7 +76,7 @@ pub fn buyer_evaluates_offer_system(
 }
 
 pub fn handle_offer_agreed_system(
-    mut target_query: Query<(&mut Agent, &TradeNegotiation)>,
+    mut target_query: Query<(&mut Agent, &TradeNegotiation), With<Interacting>>,
     mut offer_agreed_reader: EventReader<OfferAgreed>,
     mut trade_finalized_writer: EventWriter<TradeFinalized>,
 ) {
@@ -105,7 +104,7 @@ pub fn handle_offer_agreed_system(
 }
 
 pub fn handle_trade_finalized(
-    mut target_query: Query<(&mut Agent, &TradeNegotiation)>,
+    mut target_query: Query<(&mut Agent, &TradeNegotiation), With<Interacting>>,
     mut trade_finalized_reader: EventReader<TradeFinalized>,
     mut commands: Commands,
 ) {

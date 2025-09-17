@@ -24,11 +24,9 @@ fn main() {
         .add_plugins(TradePlugin)
         .add_plugins(UiPlugin)
         .init_resource::<KnowledgeManagement>()
-        .init_resource::<NewInteractionsRequests>()
         .add_systems(Startup, setup)
         .add_systems(Update, update_agents_and_interrupt_system)
         .add_systems(Update, handle_idle_agents)
-        .add_systems(Update, send_new_interactions_requests_to_agents)
         .add_systems(
             Update,
             (
@@ -65,21 +63,6 @@ fn update_agents_and_interrupt_system(
                 };
             }
         }
-    }
-}
-
-#[derive(Resource, Default)]
-pub struct NewInteractionsRequests {
-    requests: Vec<(Entity, AgentInteractionEvent)>,
-}
-
-impl NewInteractionsRequests {
-    pub fn add(&mut self, entity: Entity, interaction: AgentInteractionEvent) {
-        self.requests.push((entity, interaction))
-    }
-
-    pub fn take(&mut self) -> Vec<(Entity, AgentInteractionEvent)> {
-        std::mem::take(&mut self.requests)
     }
 }
 
@@ -133,24 +116,6 @@ impl AgentInteractionQueue {
         match self.queue.pop_front() {
             None => None,
             Some(v) => Some(v),
-        }
-    }
-}
-
-fn send_new_interactions_requests_to_agents(
-    mut query: Query<&mut AgentInteractionQueue, With<AgentInteractionQueue>>,
-    mut new_interactions_requests: ResMut<NewInteractionsRequests>,
-) {
-    let new_interactions_to_send = new_interactions_requests.take();
-
-    if new_interactions_to_send.len() > 0 {
-        // println!("new_interactions_to_send: {:?}", new_interactions_to_send);
-    }
-
-    for (entity, interaction) in new_interactions_to_send {
-        if let Ok(mut agent_queue) = query.get_mut(entity) {
-            // println!("adding new interaction to agent queue: {:?}", interaction);
-            agent_queue.add(interaction);
         }
     }
 }
@@ -268,12 +233,11 @@ fn remove_action_marker(commands: &mut Commands, entity: Entity) {
     commands.entity(entity).insert(Idle::default());
 }
 
-fn handle_idle_agents(mut query: Query<(Entity, &mut Agent), With<Idle>>, mut commands: Commands) {
+fn handle_idle_agents(
+    mut query: Query<(Entity, &mut Agent), (With<Idle>, Without<Interacting>)>,
+    mut commands: Commands,
+) {
     for (entity, mut agent) in &mut query {
-        if agent.current_state() == AgentState::HandlingInteraction {
-            continue;
-        }
-
         if agent.get_mut_action().is_none() {
             agent.new_action();
             continue;
@@ -328,6 +292,7 @@ fn handle_buy_action(
                 partner: seller,
             };
             commands.entity(buyer).insert(buyer_trade_marker);
+            commands.entity(buyer).insert(Interacting);
 
             let seller_trade_marker = TradeNegotiation {
                 role: TradeRole::Seller,
@@ -351,10 +316,6 @@ fn handle_consuming_action(
     mut commands: Commands,
 ) {
     for (entity, mut agent) in &mut query {
-        if agent.current_state() == AgentState::HandlingInteraction {
-            continue;
-        }
-
         let completion = if let Some(action) = agent.get_mut_action() {
             if let Action::CONSUME(consume) = action {
                 match consume.current_state() {
@@ -399,10 +360,6 @@ fn handle_selling_action(
     mut commands: Commands,
 ) {
     for (entity, mut agent) in &mut query {
-        if agent.current_state() == AgentState::HandlingInteraction {
-            continue;
-        }
-
         if let Some(action) = agent.get_mut_action() {
             if let Action::SELL(sell) = action {
                 match sell.current_state() {
@@ -440,10 +397,6 @@ fn handle_walking_action(
     mut commands: Commands,
 ) {
     for (entity, mut transform, config, mut sprite, mut agent) in &mut query {
-        if agent.current_state() == AgentState::HandlingInteraction {
-            continue;
-        }
-
         if let Some(action) = agent.get_mut_action() {
             if let Action::Walk(walk) = action {
                 let destination = location_to_vec3(walk.get_destination());
