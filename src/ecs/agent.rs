@@ -51,8 +51,8 @@ impl Agent {
 
     pub fn pop_current_action(&mut self) {
         let completed_action = self.action_queue.pop_front();
-        println!("action completed. {:?}", completed_action);
-        println!("Current Inventory: {:?}", self.inventory);
+        // println!("action completed. {:?}", completed_action);
+        // println!("Current Inventory: {:?}", self.inventory);
     }
 
     pub fn current_state(&self) -> AgentState {
@@ -64,9 +64,9 @@ impl Agent {
     }
 
     pub fn new_action(&mut self) {
-        println!("new action");
+        // println!("new action");
         if self.needs.is_hungry() {
-            println!("deal_with_hungry");
+            // println!("deal_with_hungry");
             return self.deal_with_hungry();
         }
 
@@ -74,7 +74,7 @@ impl Agent {
 
         if let Some(v) = self.role.consume_next_task() {
             for action in v.to_actions() {
-                println!("adding action to queue {:?}", action);
+                // println!("adding action to queue {:?}", action);
                 self.action_queue.push_back(action);
             }
         }

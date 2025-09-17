@@ -13,6 +13,7 @@ use crate::ecs::components::*;
 use crate::ecs::interaction::*;
 use crate::ecs::trade::components::*;
 use crate::ecs::trade::plugin::TradePlugin;
+use crate::ecs::ui::plugin::UiPlugin;
 
 fn main() {
     App::new()
@@ -21,6 +22,7 @@ fn main() {
             ..default()
         }))
         .add_plugins(TradePlugin)
+        .add_plugins(UiPlugin)
         .init_resource::<KnowledgeManagement>()
         .init_resource::<NewInteractionsRequests>()
         .add_systems(Startup, setup)
@@ -50,12 +52,12 @@ fn update_agents_and_interrupt_system(
         agent.frame_update();
 
         if !agent_interation_queue.is_empty() {
-            println!(
-                "Current agent queue size: {:?}",
-                agent_interation_queue.len()
-            );
+            // println!(
+            //     "Current agent queue size: {:?}",
+            //     agent_interation_queue.len()
+            // );
             if let Some(interaction) = agent_interation_queue.pop_first() {
-                println!("Pop interaction and adding to Agent: {:?}", interaction);
+                // println!("Pop interaction and adding to Agent: {:?}", interaction);
                 match interaction {
                     AgentInteractionEvent::Trade(trade_component) => commands
                         .entity(entity)
@@ -142,12 +144,12 @@ fn send_new_interactions_requests_to_agents(
     let new_interactions_to_send = new_interactions_requests.take();
 
     if new_interactions_to_send.len() > 0 {
-        println!("new_interactions_to_send: {:?}", new_interactions_to_send);
+        // println!("new_interactions_to_send: {:?}", new_interactions_to_send);
     }
 
     for (entity, interaction) in new_interactions_to_send {
         if let Ok(mut agent_queue) = query.get_mut(entity) {
-            println!("adding new interaction to agent queue: {:?}", interaction);
+            // println!("adding new interaction to agent queue: {:?}", interaction);
             agent_queue.add(interaction);
         }
     }
@@ -228,7 +230,7 @@ fn setup(
         knowledge.add(entity_id);
     }
 
-    for _ in 0..500 {
+    for _ in 0..10 {
         let entity_id = commands.spawn_empty().id();
 
         commands.entity(entity_id).insert((
@@ -275,14 +277,14 @@ fn handle_idle_agents(mut query: Query<(Entity, &mut Agent), With<Idle>>, mut co
 
         let action = agent.get_mut_action().unwrap();
 
-        println!("handle_idle_agents: {:?}", action);
+        // println!("handle_idle_agents: {:?}", action);
         match action {
             Action::Walk(_) => {
-                println!("adding walk marker");
+                // println!("adding walk marker");
                 add_marker::<Walking>(&mut commands, entity);
             }
             Action::BUY(v) => {
-                println!("adding buy marker");
+                // println!("adding buy marker");
                 commands.entity(entity).insert(Buying {
                     qty: v.qty,
                     item: v.item,
@@ -290,11 +292,11 @@ fn handle_idle_agents(mut query: Query<(Entity, &mut Agent), With<Idle>>, mut co
                 commands.entity(entity).remove::<Idle>();
             }
             Action::SELL(_) => {
-                println!("adding selling marker");
+                // println!("adding selling marker");
                 add_marker::<Selling>(&mut commands, entity);
             }
             Action::CONSUME(_) => {
-                println!("adding consume marker");
+                // println!("adding consume marker");
                 add_marker::<Consuming>(&mut commands, entity);
             }
         }
@@ -357,7 +359,7 @@ fn handle_consuming_action(
                         if consume.get_resting_duration() <= 0. {
                             consume.complete();
                         } else {
-                            println!("consuming, {:?}", consume.get_resting_duration());
+                            // println!("consuming, {:?}", consume.get_resting_duration());
                             consume.progress(time.delta_secs());
                         }
                         None
@@ -405,7 +407,7 @@ fn handle_selling_action(
                             agent.pop_current_action();
                             remove_action_marker(&mut commands, entity);
                         } else {
-                            println!("happily selling, {:?}", sell.get_resting_duration());
+                            // println!("happily selling, {:?}", sell.get_resting_duration());
                             sell.progress(time.delta_secs());
                         }
                     }
@@ -442,7 +444,7 @@ fn handle_walking_action(
                     let mut direction = (destination - transform.translation).normalize();
                     movement(&mut direction, &mut transform, &config, &mut sprite, &time);
                 } else {
-                    println!("walking done");
+                    // println!("walking done");
                     agent.pop_current_action();
                     remove_action_marker(&mut commands, entity);
                 }
@@ -466,7 +468,7 @@ fn movement(
     sprite: &mut Sprite,
     time: &Res<Time>,
 ) {
-    let speed = 150.0;
+    let speed = 125.0;
 
     if direction.length_squared() > 0.0 {
         if let Some(atlas) = &mut sprite.texture_atlas {
