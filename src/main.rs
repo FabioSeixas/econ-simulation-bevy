@@ -11,6 +11,9 @@ use crate::core::location::Location;
 use crate::ecs::agent::*;
 use crate::ecs::components::*;
 use crate::ecs::interaction::*;
+use crate::ecs::roles::none::NoneRole;
+use crate::ecs::roles::plugin::RolesPlugin;
+use crate::ecs::roles::seller::SellerRole;
 use crate::ecs::trade::components::*;
 use crate::ecs::trade::plugin::TradePlugin;
 use crate::ecs::ui::plugin::UiPlugin;
@@ -23,6 +26,7 @@ fn main() {
         }))
         .add_plugins(TradePlugin)
         .add_plugins(UiPlugin)
+        .add_plugins(RolesPlugin)
         .init_resource::<KnowledgeManagement>()
         .add_systems(Startup, setup)
         .add_systems(Update, update_agents_and_interrupt_system)
@@ -120,14 +124,6 @@ impl AgentInteractionQueue {
     }
 }
 
-#[derive(Component, Default)]
-pub struct Walking {
-    destination: Vec3,
-}
-
-#[derive(Component, Default)]
-pub struct Consuming;
-
 #[derive(Component)]
 struct AnimationConfig {
     first_up_index: usize,
@@ -192,6 +188,9 @@ fn setup(
             AnimationConfig::new(),
             AgentInteractionQueue::new(),
             Name::new("the happier seller"),
+            SellerRole {
+                location: Vec3::new(100., 100., 0.),
+            },
             Idle {},
         ));
 
@@ -215,6 +214,7 @@ fn setup(
             AnimationConfig::new(),
             AgentInteractionQueue::new(),
             Name::new(format!("agent_{}", i)),
+            NoneRole,
             Idle {},
         ));
     }
@@ -234,42 +234,61 @@ fn remove_action_marker(commands: &mut Commands, entity: Entity) {
 }
 
 fn handle_idle_agents(
-    mut query: Query<(Entity, &mut Agent), (With<Idle>, Without<Interacting>)>,
+    query: Query<(Entity, &Agent), (With<Idle>, Without<Interacting>)>,
     mut commands: Commands,
 ) {
-    for (entity, mut agent) in &mut query {
-        if agent.get_mut_action().is_none() {
-            agent.new_action();
-            continue;
+    for (entity, agent) in &query {
+        if agent.is_hungry() {
+            if agent.can_eat() {
+                commands
+                    .entity(entity)
+                    .insert(ConsumeTask::new(core::item::ItemEnum::MEAT, 1))
+                    .remove::<Idle>();
+            } else {
+                commands
+                    .entity(entity)
+                    .insert(BuyTask::new(core::item::ItemEnum::MEAT, 1))
+                    .remove::<Idle>();
+            }
         }
+    }
+}
 
-        let action = agent.get_mut_action().unwrap();
+fn handle_buy_task(
+    mut query: Query<
+        (Entity, &mut Agent, &BuyTask),
+        (With<BuyTask>, Without<Idle>, Without<Interacting>),
+    >,
+    mut query_seller: Query<&mut AgentInteractionQueue, With<Selling>>,
+    mut commands: Commands,
+    knowledge: Res<KnowledgeManagement>,
+) {
+    for (buyer, agent, buying) in &mut query {
+        let seller = knowledge.get_knowlegde();
 
-        // println!("handle_idle_agents: {:?}", action);
-        match action {
-            Action::Walk(v) => {
-                // println!("adding walk marker");
-                commands.entity(entity).insert(Walking {
-                    destination: location_to_vec3(v.get_destination()),
-                });
-                commands.entity(entity).remove::<Idle>();
-            }
-            Action::BUY(v) => {
-                // println!("adding buy marker");
-                commands.entity(entity).insert(Buying {
-                    qty: v.qty,
-                    item: v.item,
-                });
-                commands.entity(entity).remove::<Idle>();
-            }
-            Action::SELL(_) => {
-                // println!("adding selling marker");
-                add_marker::<Selling>(&mut commands, entity);
-            }
-            Action::CONSUME(_) => {
-                // println!("adding consume marker");
-                add_marker::<Consuming>(&mut commands, entity);
-            }
+        if let Ok(mut seller_agent_interaction_queue) = query_seller.get_mut(seller) {
+            let buyer_trade_marker = TradeNegotiation {
+                role: TradeRole::Buyer,
+                quantity: buying.qty,
+                item: buying.item,
+                price: None,
+                partner: seller,
+            };
+            commands.entity(buyer).insert(buyer_trade_marker);
+            commands.entity(buyer).insert(Interacting);
+
+            let seller_trade_marker = TradeNegotiation {
+                role: TradeRole::Seller,
+                quantity: buying.qty,
+                item: buying.item,
+                price: None,
+                partner: buyer,
+            };
+            seller_agent_interaction_queue.add(AgentInteractionEvent::Trade(seller_trade_marker));
+        } else {
+            // seller not found
+            // agent.pop_current_action();
+            remove_action_marker(&mut commands, buyer);
         }
     }
 }
@@ -304,52 +323,68 @@ fn handle_buy_action(
             seller_agent_interaction_queue.add(AgentInteractionEvent::Trade(seller_trade_marker));
         } else {
             // seller not found
-            agent.pop_current_action();
+            // agent.pop_current_action();
             remove_action_marker(&mut commands, buyer);
         }
     }
 }
 
+fn handle_consume_task(
+    mut query: Query<
+        (Entity, &Transform, &ConsumeTask),
+        (
+            With<ConsumeTask>,
+            Without<Consuming>,
+            Without<Idle>,
+            Without<Interacting>,
+        ),
+    >,
+    mut commands: Commands,
+) {
+    for (entity, transform, consume_task) in &mut query {
+        if consume_task.done {
+            commands.entity(entity).insert(Idle).remove::<ConsumeTask>();
+        } else if consume_task.location.distance(transform.translation) > 50. {
+            let mut walking = Walking::new(consume_task.location);
+            walking.set_idle_at_completion(false);
+            commands.entity(entity).insert(walking).remove::<Idle>();
+        } else {
+            let mut consuming = Consuming::new(consume_task.item, consume_task.qty);
+            consuming.set_idle_at_completion(false);
+            commands.entity(entity).insert(consuming).remove::<Idle>();
+        }
+    }
+}
+
 fn handle_consuming_action(
-    mut query: Query<(Entity, &mut Agent), (With<Consuming>, Without<Interacting>)>,
+    mut query: Query<
+        (Entity, &mut Agent, &mut Consuming),
+        (
+            With<Consuming>,
+            With<ConsumeTask>,
+            Without<Idle>,
+            Without<Interacting>,
+        ),
+    >,
     time: Res<Time>,
     mut commands: Commands,
 ) {
-    for (entity, mut agent) in &mut query {
-        let completion = if let Some(action) = agent.get_mut_action() {
-            if let Action::CONSUME(consume) = action {
-                match consume.current_state() {
-                    ActionState::CREATED => {
-                        consume.update_state();
-                        None
-                    }
-                    ActionState::IN_PROGRESS => {
-                        if consume.get_resting_duration() <= 0. {
-                            consume.complete();
-                        } else {
-                            // println!("consuming, {:?}", consume.get_resting_duration());
-                            consume.progress(time.delta_secs());
-                        }
-                        None
-                    }
-                    ActionState::COMPLETED => Some(consume.clone()),
-                    _ => None,
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+    for (entity, mut agent, mut consuming) in &mut query {
+        if consuming.get_resting_duration() > 0. {
+            consuming.progress(time.delta_secs());
+            continue;
+        }
 
-        if let Some(consume) = completion {
-            let item = consume.item.clone();
-            if item.is_food() {
-                agent.satisfy_hungry();
-            }
-            agent.inventory.remove(item, consume.qty);
-            agent.pop_current_action();
-            remove_action_marker(&mut commands, entity);
+        let item = consuming.item.clone();
+        if item.is_food() {
+            agent.satisfy_hungry();
+        }
+        agent.inventory.remove(item, consuming.qty);
+
+        if consuming.should_set_idle_at_completion() {
+            commands.entity(entity).insert(Idle).remove::<Consuming>();
+        } else {
+            commands.entity(entity).remove::<Consuming>();
         }
     }
 }
@@ -368,7 +403,7 @@ fn handle_selling_action(
                     }
                     ActionState::IN_PROGRESS => {
                         if sell.get_resting_duration() <= 0. {
-                            agent.pop_current_action();
+                            // agent.pop_current_action();
                             remove_action_marker(&mut commands, entity);
                         } else {
                             // println!("happily selling, {:?}", sell.get_resting_duration());
@@ -389,25 +424,22 @@ fn handle_walking_action(
             &mut Transform,
             &AnimationConfig,
             &mut Sprite,
-            &mut Agent,
+            &Walking,
         ),
         (With<Walking>, Without<Interacting>),
     >,
     time: Res<Time>,
     mut commands: Commands,
 ) {
-    for (entity, mut transform, config, mut sprite, mut agent) in &mut query {
-        if let Some(action) = agent.get_mut_action() {
-            if let Action::Walk(walk) = action {
-                let destination = location_to_vec3(walk.get_destination());
-                if destination.distance(transform.translation) > 50. {
-                    let mut direction = (destination - transform.translation).normalize();
-                    movement(&mut direction, &mut transform, &config, &mut sprite, &time);
-                } else {
-                    // println!("walking done");
-                    agent.pop_current_action();
-                    remove_action_marker(&mut commands, entity);
-                }
+    for (entity, mut transform, config, mut sprite, walking) in &mut query {
+        if walking.destination.distance(transform.translation) > 50. {
+            let mut direction = (walking.destination - transform.translation).normalize();
+            movement(&mut direction, &mut transform, &config, &mut sprite, &time);
+        } else {
+            if walking.should_set_idle_at_completion() {
+                commands.entity(entity).insert(Idle).remove::<Walking>();
+            } else {
+                commands.entity(entity).remove::<Walking>();
             }
         }
     }

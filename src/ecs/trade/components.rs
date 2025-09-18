@@ -3,9 +3,26 @@ use bevy::prelude::*;
 use crate::{core::item::ItemEnum, ecs::components::Interacting};
 
 #[derive(Component)]
+pub struct BuyTask {
+    pub item: ItemEnum,
+    pub qty: usize,
+    tried_sellers: Vec<Entity>,
+}
+
+impl BuyTask {
+    pub fn new(item: ItemEnum, qty: usize) -> Self {
+        Self {
+            item,
+            qty,
+            tried_sellers: vec![],
+        }
+    }
+}
+
+#[derive(Component)]
 pub struct Buying {
     pub item: ItemEnum,
-    pub qty: usize
+    pub qty: usize,
 }
 
 #[derive(Component, Default)]

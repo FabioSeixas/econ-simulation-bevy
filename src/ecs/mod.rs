@@ -3,3 +3,5 @@ pub mod interaction;
 pub mod trade;
 pub mod components;
 pub mod ui;
+pub mod roles;
+pub mod utils;

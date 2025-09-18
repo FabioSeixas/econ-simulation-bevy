@@ -111,7 +111,7 @@ pub fn handle_trade_finalized(
     for event in trade_finalized_reader.read() {
         if let Ok((mut agent, trade)) = target_query.get_mut(event.target) {
             if trade.role == TradeRole::Buyer {
-                agent.pop_current_action();
+                // agent.pop_current_action();
                 commands
                     .entity(event.target)
                     .remove::<(TradeInteraction, Buying)>();
