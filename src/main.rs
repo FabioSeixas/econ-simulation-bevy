@@ -191,7 +191,7 @@ fn setup(
             SellerRole {
                 location: Vec3::new(100., 100., 0.),
             },
-            Idle {},
+            Idle,
         ));
 
         knowledge.add(entity_id);
@@ -215,7 +215,7 @@ fn setup(
             AgentInteractionQueue::new(),
             Name::new(format!("agent_{}", i)),
             NoneRole,
-            Idle {},
+            Idle,
         ));
     }
 }
@@ -239,7 +239,7 @@ fn handle_idle_agents(
 ) {
     for (entity, agent) in &query {
         if agent.is_hungry() {
-            if agent.can_eat() {
+            if agent.have_food() {
                 commands
                     .entity(entity)
                     .insert(ConsumeTask::new(core::item::ItemEnum::MEAT, 1))
@@ -334,6 +334,7 @@ fn handle_consume_task(
         (Entity, &Transform, &ConsumeTask),
         (
             With<ConsumeTask>,
+            Without<Walking>,
             Without<Consuming>,
             Without<Idle>,
             Without<Interacting>,
@@ -390,30 +391,17 @@ fn handle_consuming_action(
 }
 
 fn handle_selling_action(
-    mut query: Query<(Entity, &mut Agent), (With<Selling>, Without<Interacting>)>,
+    mut query: Query<(Entity, &mut Selling), (With<Selling>, Without<Interacting>, Without<Idle>)>,
     time: Res<Time>,
     mut commands: Commands,
 ) {
-    for (entity, mut agent) in &mut query {
-        if let Some(action) = agent.get_mut_action() {
-            if let Action::SELL(sell) = action {
-                match sell.current_state() {
-                    ActionState::CREATED => {
-                        sell.update_state();
-                    }
-                    ActionState::IN_PROGRESS => {
-                        if sell.get_resting_duration() <= 0. {
-                            // agent.pop_current_action();
-                            remove_action_marker(&mut commands, entity);
-                        } else {
-                            // println!("happily selling, {:?}", sell.get_resting_duration());
-                            sell.progress(time.delta_secs());
-                        }
-                    }
-                    _ => {}
-                }
-            }
+    for (entity, mut selling) in &mut query {
+        if selling.get_resting_duration() > 0. {
+            selling.progress(time.delta_secs());
+            continue;
         }
+
+        commands.entity(entity).insert(Idle).remove::<Consuming>();
     }
 }
 
@@ -426,7 +414,7 @@ fn handle_walking_action(
             &mut Sprite,
             &Walking,
         ),
-        (With<Walking>, Without<Interacting>),
+        (With<Walking>, Without<Interacting>, Without<Idle>),
     >,
     time: Res<Time>,
     mut commands: Commands,

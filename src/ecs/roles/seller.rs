@@ -30,7 +30,7 @@ pub fn handle_idle_sellers(
                 .insert(Walking::new(seller_role.location))
                 .remove::<Idle>();
         } else {
-            commands.entity(entity).insert(Selling).remove::<Idle>();
+            commands.entity(entity).insert(Selling::new()).remove::<Idle>();
         }
     }
 }

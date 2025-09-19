@@ -83,7 +83,7 @@ impl Agent {
         self.needs.update();
     }
 
-    pub fn can_eat(&self) -> bool {
+    pub fn have_food(&self) -> bool {
         self.inventory.get_qty(ItemEnum::MEAT) > 0
     }
 
