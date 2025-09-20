@@ -9,6 +9,9 @@ use bevy::prelude::*;
 use crate::ecs::agent::*;
 use crate::ecs::components::*;
 use crate::ecs::interaction::*;
+use crate::ecs::knowledge::AgentKnowledge;
+use crate::ecs::knowledge::KnowledgePlugin;
+use crate::ecs::knowledge::SharedKnowledge;
 use crate::ecs::logs::*;
 use crate::ecs::roles::none::NoneRole;
 use crate::ecs::roles::seller::SellerRole;
@@ -24,9 +27,9 @@ fn main() {
             level: Level::DEBUG, // Set minimum level to show debug logs
             ..default()
         }))
-        .init_resource::<KnowledgeManagement>()
         .add_event::<AddLogEntry>()
         .add_plugins(TradePlugin)
+        .add_plugins(KnowledgePlugin)
         .add_plugins(UiPlugin)
         .add_systems(Startup, setup)
         .add_systems(
@@ -103,24 +106,6 @@ fn check_agent_interaction_queue_system(
                 };
             }
         }
-    }
-}
-
-#[derive(Resource, Default)]
-pub struct KnowledgeManagement {
-    sellers: Vec<Entity>,
-}
-
-impl KnowledgeManagement {
-    pub fn new() -> Self {
-        Self { sellers: vec![] }
-    }
-    pub fn add(&mut self, entity: Entity) {
-        self.sellers.push(entity);
-    }
-
-    pub fn get_sellers(&self) -> &Vec<Entity> {
-        &self.sellers
     }
 }
 
@@ -209,8 +194,8 @@ struct Player;
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    mut shared_knowledge: ResMut<SharedKnowledge>,
     mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
-    mut knowledge: ResMut<KnowledgeManagement>,
 ) {
     commands.spawn(Camera2d);
 
@@ -221,7 +206,7 @@ fn setup(
 
     let scale = Vec3::splat(1.0);
 
-    for _ in 0..10 {
+    for _ in 0..5 {
         let entity_id = commands.spawn_empty().id();
 
         let v = get_random_vec3();
@@ -235,7 +220,7 @@ fn setup(
                 }),
                 ..default()
             },
-            Agent::new_seller(),
+            Agent::new_seller_of(core::item::ItemEnum::MEAT),
             Transform::from_scale(scale).with_translation(v),
             AnimationConfig::new(),
             AgentInteractionQueue::new(),
@@ -245,7 +230,34 @@ fn setup(
             Idle,
         ));
 
-        knowledge.add(entity_id);
+        shared_knowledge.add_seller(core::item::ItemEnum::MEAT, entity_id);
+    }
+
+    for _ in 0..5 {
+        let entity_id = commands.spawn_empty().id();
+
+        let v = get_random_vec3();
+
+        commands.entity(entity_id).insert((
+            Sprite {
+                image: seller_texture.clone(),
+                texture_atlas: Some(TextureAtlas {
+                    layout: texture_atlas_layout.clone(),
+                    index: 0,
+                }),
+                ..default()
+            },
+            Agent::new_seller_of(core::item::ItemEnum::WATER),
+            Transform::from_scale(scale).with_translation(v),
+            AnimationConfig::new(),
+            AgentInteractionQueue::new(),
+            Name::new("the happier seller"),
+            AgentLogs::new(),
+            SellerRole { location: v },
+            Idle,
+        ));
+
+        shared_knowledge.add_seller(core::item::ItemEnum::WATER, entity_id);
     }
 
     for i in 0..150 {
@@ -312,7 +324,7 @@ fn check_idle_agents_needs(
 
 fn handle_buy_task(
     mut query: Query<
-        (Entity, &Transform, &BuyTask),
+        (Entity, &Transform, &BuyTask, &AgentKnowledge),
         (
             With<BuyTask>,
             Without<Idle>,
@@ -325,14 +337,12 @@ fn handle_buy_task(
     mut query_seller: Query<&SellerRole, With<SellerRole>>,
     mut commands: Commands,
     mut add_log_writer: EventWriter<AddLogEntry>,
-    knowledge: Res<KnowledgeManagement>,
 ) {
-    let sellers = knowledge.get_sellers();
-    for (buyer, buyer_transform, buy_task) in &mut query {
+    for (buyer, buyer_transform, buy_task, buyer_knowledge) in &mut query {
         let mut some_seller_found = false;
 
-        for seller in sellers {
-            if buy_task.tried(seller) {
+        for seller in buyer_knowledge.get_sellers_of(&buy_task.item) {
+            if buy_task.tried(&seller) {
                 continue;
             }
 
@@ -358,7 +368,10 @@ fn handle_buy_task(
         }
 
         if !some_seller_found {
-            add_log_writer.send(AddLogEntry::new(buyer, "BuyTask failed"));
+            add_log_writer.send(AddLogEntry::new(
+                buyer,
+                "Not seller found. BuyTask failed. Walking around",
+            ));
             commands
                 .entity(buyer)
                 .insert(Walking::new(get_random_vec3()))

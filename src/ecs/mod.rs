@@ -6,3 +6,4 @@ pub mod ui;
 pub mod roles;
 pub mod utils;
 pub mod logs;
+pub mod knowledge;

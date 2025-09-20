@@ -12,6 +12,8 @@ pub enum ItemEnum {
 }
 
 impl ItemEnum {
+    pub const ALL: [ItemEnum; 3] = [ItemEnum::MONEY, ItemEnum::MEAT, ItemEnum::WATER];
+
     pub fn is_food(&self) -> bool {
         match self {
             ItemEnum::MEAT => true,

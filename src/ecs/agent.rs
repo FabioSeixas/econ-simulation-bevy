@@ -19,15 +19,11 @@ impl Agent {
         }
     }
 
-    pub fn new_seller() -> Self {
+    pub fn new_seller_of(item: ItemEnum) -> Self {
         let mut rng = rand::thread_rng();
         let mut inv = Inventory::new();
 
-        if rng.gen_bool(0.5) {
-            inv.add(ItemEnum::MEAT, 5000);
-        } else {
-            inv.add(ItemEnum::WATER, 5000);
-        }
+        inv.add(item, 5000);
 
         Self {
             needs: Needs::new(),
