@@ -6,6 +6,7 @@ use std::collections::VecDeque;
 use bevy::log::*;
 use bevy::prelude::*;
 
+use crate::core::item::ItemEnum;
 use crate::ecs::agent::*;
 use crate::ecs::components::*;
 use crate::ecs::interaction::*;
@@ -220,7 +221,7 @@ fn setup(
                 }),
                 ..default()
             },
-            Agent::new_seller_of(core::item::ItemEnum::MEAT),
+            Agent::new_seller_of(ItemEnum::MEAT),
             Transform::from_scale(scale).with_translation(v),
             AnimationConfig::new(),
             AgentInteractionQueue::new(),
@@ -230,7 +231,11 @@ fn setup(
             Idle,
         ));
 
-        shared_knowledge.add_seller(core::item::ItemEnum::MEAT, entity_id);
+        shared_knowledge.add_fact(ecs::knowledge::KnowledgeFact::SellerInfo {
+            entity: entity_id,
+            location: v,
+            wares: vec![ItemEnum::MEAT],
+        });
     }
 
     for _ in 0..5 {
@@ -257,7 +262,11 @@ fn setup(
             Idle,
         ));
 
-        shared_knowledge.add_seller(core::item::ItemEnum::WATER, entity_id);
+        shared_knowledge.add_fact(ecs::knowledge::KnowledgeFact::SellerInfo {
+            entity: entity_id,
+            location: v,
+            wares: vec![ItemEnum::WATER],
+        });
     }
 
     for i in 0..150 {
