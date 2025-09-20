@@ -1,7 +1,7 @@
 use bevy::ecs::{
     component::Component,
     entity::Entity,
-    query::With,
+    query::{With, Without},
     system::{Commands, Query},
 };
 
@@ -14,7 +14,7 @@ use crate::ecs::{
 pub struct NoneRole;
 
 pub fn handle_idle_none_role(
-    query: Query<Entity, (With<NoneRole>, With<Idle>)>,
+    query: Query<Entity, (With<NoneRole>, With<Idle>, Without<Walking>)>,
     mut commands: Commands,
 ) {
     for entity in &query {

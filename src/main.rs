@@ -6,17 +6,16 @@ use std::collections::VecDeque;
 use bevy::log::*;
 use bevy::prelude::*;
 
-use crate::core::action::*;
-use crate::core::location::Location;
 use crate::ecs::agent::*;
 use crate::ecs::components::*;
 use crate::ecs::interaction::*;
 use crate::ecs::roles::none::NoneRole;
-use crate::ecs::roles::plugin::RolesPlugin;
 use crate::ecs::roles::seller::SellerRole;
+use crate::ecs::roles::{none::*, seller::*};
 use crate::ecs::trade::components::*;
 use crate::ecs::trade::plugin::TradePlugin;
 use crate::ecs::ui::plugin::UiPlugin;
+use crate::ecs::utils::get_random_vec3;
 
 fn main() {
     App::new()
@@ -26,11 +25,14 @@ fn main() {
         }))
         .add_plugins(TradePlugin)
         .add_plugins(UiPlugin)
-        .add_plugins(RolesPlugin)
         .init_resource::<KnowledgeManagement>()
         .add_systems(Startup, setup)
-        .add_systems(Update, update_agents_and_interrupt_system)
-        .add_systems(Update, handle_idle_agents)
+        .add_systems(
+            Update,
+            (update_agents_and_interrupt_system, check_idle_agents_needs).chain(),
+        )
+        .add_systems(Update, (handle_idle_sellers, handle_idle_none_role))
+        .add_systems(Update, (handle_consume_task, handle_buy_task))
         .add_systems(
             Update,
             (
@@ -60,10 +62,16 @@ fn update_agents_and_interrupt_system(
             // );
             if let Some(interaction) = agent_interation_queue.pop_first() {
                 // println!("Pop interaction and adding to Agent: {:?}", interaction);
-                match interaction {
-                    AgentInteractionEvent::Trade(trade_component) => commands
-                        .entity(entity)
-                        .insert(TradeInteraction::new(trade_component)),
+                match interaction.kind {
+                    AgentInteractionKind::Trade(trade_component) => {
+                        commands
+                            .entity(trade_component.partner)
+                            .insert(Interacting)
+                            .remove::<WaitingInteraction>();
+                        commands
+                            .entity(entity)
+                            .insert(TradeInteraction::new(trade_component))
+                    }
                 };
             }
         }
@@ -72,33 +80,47 @@ fn update_agents_and_interrupt_system(
 
 #[derive(Resource, Default)]
 pub struct KnowledgeManagement {
-    seller: Vec<Entity>,
+    sellers: Vec<Entity>,
 }
 
 impl KnowledgeManagement {
+    pub fn new() -> Self {
+        Self { sellers: vec![] }
+    }
     pub fn add(&mut self, entity: Entity) {
-        self.seller = vec![entity];
+        self.sellers.push(entity);
     }
 
-    pub fn get_knowlegde(&self) -> Entity {
-        self.seller[0]
+    pub fn get_sellers(&self) -> &Vec<Entity> {
+        &self.sellers
     }
 }
 
 #[derive(Component)]
 pub struct AgentInteractionQueue {
+    next_id: usize,
     queue: VecDeque<AgentInteractionEvent>,
 }
 
 impl AgentInteractionQueue {
     pub fn new() -> Self {
         Self {
+            next_id: 0,
             queue: VecDeque::new(),
         }
     }
 
-    pub fn add(&mut self, event: AgentInteractionEvent) {
-        self.queue.push_back(event);
+    pub fn add(&mut self, kind: AgentInteractionKind) -> usize {
+        self.queue.push_back(AgentInteractionEvent {
+            id: self.next_id,
+            kind,
+        });
+        self.next_id += 1;
+        self.next_id
+    }
+
+    pub fn rm_id(&mut self, rm_id: usize) {
+        self.queue.retain(|event| event.id != rm_id);
     }
 
     pub fn is_empty(&self) -> bool {
@@ -171,8 +193,10 @@ fn setup(
 
     let scale = Vec3::splat(1.0);
 
-    for _ in 0..1 {
+    for x in 0..3 {
         let entity_id = commands.spawn_empty().id();
+
+        let v = 100. * x as f32;
 
         commands.entity(entity_id).insert((
             Sprite {
@@ -184,12 +208,12 @@ fn setup(
                 ..default()
             },
             Agent::new_seller(),
-            Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
+            Transform::from_scale(scale).with_translation(Vec3::new(v, v, 0.)),
             AnimationConfig::new(),
             AgentInteractionQueue::new(),
             Name::new("the happier seller"),
             SellerRole {
-                location: Vec3::new(100., 100., 0.),
+                location: Vec3::new(v, v, 0.),
             },
             Idle,
         ));
@@ -197,7 +221,7 @@ fn setup(
         knowledge.add(entity_id);
     }
 
-    for i in 0..10 {
+    for i in 0..80 {
         let entity_id = commands.spawn_empty().id();
 
         commands.entity(entity_id).insert((
@@ -220,20 +244,7 @@ fn setup(
     }
 }
 
-fn add_marker<T: Component + Default>(commands: &mut Commands, entity: Entity) {
-    commands.entity(entity).insert(T::default());
-    commands.entity(entity).remove::<Idle>();
-}
-
-fn remove_action_marker(commands: &mut Commands, entity: Entity) {
-    // TODO: somehow this must give me a compile error when new actions are created
-    commands
-        .entity(entity)
-        .remove::<(Walking, Consuming, Buying, Selling)>();
-    commands.entity(entity).insert(Idle::default());
-}
-
-fn handle_idle_agents(
+fn check_idle_agents_needs(
     query: Query<(Entity, &Agent), (With<Idle>, Without<Interacting>)>,
     mut commands: Commands,
 ) {
@@ -256,62 +267,95 @@ fn handle_idle_agents(
 
 fn handle_buy_task(
     mut query: Query<
-        (Entity, &mut Agent, &BuyTask),
-        (With<BuyTask>, Without<Idle>, Without<Interacting>),
+        (Entity, &Transform, &BuyTask),
+        (
+            With<BuyTask>,
+            Without<Idle>,
+            Without<Interacting>,
+            Without<WaitingInteraction>,
+            Without<Buying>,
+            Without<Walking>,
+        ),
     >,
-    mut query_seller: Query<&mut AgentInteractionQueue, With<Selling>>,
+    mut query_seller: Query<&SellerRole, With<SellerRole>>,
     mut commands: Commands,
     knowledge: Res<KnowledgeManagement>,
 ) {
-    for (buyer, agent, buying) in &mut query {
-        let seller = knowledge.get_knowlegde();
+    let sellers = knowledge.get_sellers();
+    for (buyer, buyer_transform, buy_task) in &mut query {
+        let mut some_seller_found = false;
 
-        if let Ok(mut seller_agent_interaction_queue) = query_seller.get_mut(seller) {
-            let buyer_trade_marker = TradeNegotiation {
-                role: TradeRole::Buyer,
-                quantity: buying.qty,
-                item: buying.item,
-                price: None,
-                partner: seller,
-            };
-            commands.entity(buyer).insert(buyer_trade_marker);
-            commands.entity(buyer).insert(Interacting);
+        for seller in sellers {
+            if buy_task.tried(seller) {
+                continue;
+            }
 
-            let seller_trade_marker = TradeNegotiation {
-                role: TradeRole::Seller,
-                quantity: buying.qty,
-                item: buying.item,
-                price: None,
-                partner: buyer,
-            };
-            seller_agent_interaction_queue.add(AgentInteractionEvent::Trade(seller_trade_marker));
-        } else {
-            // seller not found
-            // agent.pop_current_action();
-            remove_action_marker(&mut commands, buyer);
+            some_seller_found = true;
+
+            if let Ok(seller_role) = query_seller.get_mut(seller.clone()) {
+                if buyer_transform.translation.distance(seller_role.location) > 50. {
+                    let mut walking = Walking::new(seller_role.location);
+                    walking.set_idle_at_completion(false);
+                    commands.entity(buyer).insert(walking);
+                } else {
+                    commands
+                        .entity(buyer)
+                        .insert(Buying::from_buy_task(&buy_task, seller.clone()));
+                }
+            }
+        }
+
+        if !some_seller_found {
+            println!("Tried all sellers and failed");
+            commands
+                .entity(buyer)
+                .insert(Walking::new(get_random_vec3()))
+                .remove::<BuyTask>();
         }
     }
 }
 
 fn handle_buy_action(
-    mut query: Query<(Entity, &mut Agent, &Buying), Added<Buying>>,
+    mut query: Query<
+        (
+            Entity,
+            &mut Buying,
+            &mut BuyTask,
+            Option<&mut WaitingInteraction>,
+        ),
+        (With<Buying>, Without<Idle>, Without<Interacting>),
+    >,
     mut query_seller: Query<&mut AgentInteractionQueue, With<Selling>>,
     mut commands: Commands,
-    knowledge: Res<KnowledgeManagement>,
+    time: Res<Time>,
 ) {
-    for (buyer, mut agent, buying) in &mut query {
-        let seller = knowledge.get_knowlegde();
-
-        if let Ok(mut seller_agent_interaction_queue) = query_seller.get_mut(seller) {
+    for (buyer, mut buying, mut buy_task, waiting_interaction) in &mut query {
+        if let Some(mut waiting) = waiting_interaction {
+            if waiting.get_resting_duration() > 0. {
+                waiting.progress(time.delta_secs());
+            } else {
+                if let Ok(mut seller_interaction_queue) = query_seller.get_mut(buying.seller) {
+                    if buying.interaction_id.is_none() {
+                        panic!("handle_buy_action, buying.interaction_id must be Some")
+                    }
+                    seller_interaction_queue.rm_id(buying.interaction_id.unwrap());
+                    buy_task.add_tried(buying.seller);
+                    commands
+                        .entity(buyer)
+                        .remove::<(WaitingInteraction, Buying)>();
+                }
+            }
+        } else if let Ok(mut seller_agent_interaction_queue) = query_seller.get_mut(buying.seller) {
             let buyer_trade_marker = TradeNegotiation {
                 role: TradeRole::Buyer,
                 quantity: buying.qty,
                 item: buying.item,
                 price: None,
-                partner: seller,
+                partner: buying.seller.clone(),
             };
-            commands.entity(buyer).insert(buyer_trade_marker);
-            commands.entity(buyer).insert(Interacting);
+            commands
+                .entity(buyer)
+                .insert((buyer_trade_marker, WaitingInteraction::new()));
 
             let seller_trade_marker = TradeNegotiation {
                 role: TradeRole::Seller,
@@ -320,11 +364,15 @@ fn handle_buy_action(
                 price: None,
                 partner: buyer,
             };
-            seller_agent_interaction_queue.add(AgentInteractionEvent::Trade(seller_trade_marker));
+
+            let id = seller_agent_interaction_queue
+                .add(AgentInteractionKind::Trade(seller_trade_marker));
+
+            buying.interaction_id = Some(id);
         } else {
-            // seller not found
-            // agent.pop_current_action();
-            remove_action_marker(&mut commands, buyer);
+            println!("Seller not found");
+            buy_task.add_tried(buying.seller);
+            commands.entity(buyer).remove::<Buying>();
         }
     }
 }
@@ -343,16 +391,15 @@ fn handle_consume_task(
     mut commands: Commands,
 ) {
     for (entity, transform, consume_task) in &mut query {
-        if consume_task.done {
-            commands.entity(entity).insert(Idle).remove::<ConsumeTask>();
-        } else if consume_task.location.distance(transform.translation) > 50. {
+        if consume_task.location.distance(transform.translation) > 50. {
             let mut walking = Walking::new(consume_task.location);
             walking.set_idle_at_completion(false);
             commands.entity(entity).insert(walking).remove::<Idle>();
         } else {
-            let mut consuming = Consuming::new(consume_task.item, consume_task.qty);
-            consuming.set_idle_at_completion(false);
-            commands.entity(entity).insert(consuming).remove::<Idle>();
+            commands
+                .entity(entity)
+                .insert(Consuming::new(consume_task.item, consume_task.qty))
+                .remove::<Idle>();
         }
     }
 }
@@ -363,8 +410,8 @@ fn handle_consuming_action(
         (
             With<Consuming>,
             With<ConsumeTask>,
-            Without<Idle>,
             Without<Interacting>,
+            Without<Idle>,
         ),
     >,
     time: Res<Time>,
@@ -380,28 +427,13 @@ fn handle_consuming_action(
         if item.is_food() {
             agent.satisfy_hungry();
         }
+        println!("will remove food after consuming");
         agent.inventory.remove(item, consuming.qty);
 
-        if consuming.should_set_idle_at_completion() {
-            commands.entity(entity).insert(Idle).remove::<Consuming>();
-        } else {
-            commands.entity(entity).remove::<Consuming>();
-        }
-    }
-}
-
-fn handle_selling_action(
-    mut query: Query<(Entity, &mut Selling), (With<Selling>, Without<Interacting>, Without<Idle>)>,
-    time: Res<Time>,
-    mut commands: Commands,
-) {
-    for (entity, mut selling) in &mut query {
-        if selling.get_resting_duration() > 0. {
-            selling.progress(time.delta_secs());
-            continue;
-        }
-
-        commands.entity(entity).insert(Idle).remove::<Consuming>();
+        commands
+            .entity(entity)
+            .insert(Idle)
+            .remove::<(Consuming, ConsumeTask)>();
     }
 }
 
@@ -430,14 +462,6 @@ fn handle_walking_action(
                 commands.entity(entity).remove::<Walking>();
             }
         }
-    }
-}
-
-fn location_to_vec3(location: Location) -> Vec3 {
-    Vec3 {
-        x: location[0],
-        y: location[1],
-        z: location[2],
     }
 }
 

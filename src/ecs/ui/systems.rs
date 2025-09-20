@@ -14,14 +14,21 @@ use bevy::{
     window::{PrimaryWindow, Window},
 };
 
-use crate::{ecs::{trade::components::Selling, ui::resources::SelectedAgent}, Consuming};
 use crate::{
     ecs::{
         agent::*,
-        components::Idle,
-        trade::components::{Buying, TradeNegotiation},
+        components::{ConsumeTask, DurationActionMarker, Idle},
+        trade::components::{BuyTask, Buying, TradeNegotiation},
     },
     AgentInteractionQueue, Walking,
+};
+use crate::{
+    ecs::{
+        components::{Interacting, WaitingInteraction},
+        trade::components::Selling,
+        ui::resources::SelectedAgent,
+    },
+    Consuming,
 };
 
 pub fn agent_selection_system(
@@ -90,6 +97,8 @@ pub fn agent_ui_panel_system(
     selling_query: Query<&Selling>,
     consuming_query: Query<&Consuming>,
     trade_query: Query<&TradeNegotiation>, // The active interaction component
+    task_query: Query<(Option<&BuyTask>, Option<&ConsumeTask>)>,
+    interaction_query: Query<(Option<&Interacting>, Option<&WaitingInteraction>)>,
 ) {
     // Check if an agent is selected. If not, we don't draw anything.
     let Some(selected_entity) = selected_agent.entity else {
@@ -131,9 +140,20 @@ pub fn agent_ui_panel_system(
             ui.label(status_text);
             ui.separator();
 
+            // --- Display Task ---
+            ui.label("CURRENT TASK:");
+            if let Ok((buy, consume)) = task_query.get(selected_entity) {
+                if let Some(_) = buy {
+                    ui.label("Buy Task");
+                } else if let Some(_) = consume {
+                    ui.label("Consume Task");
+                } else {
+                    ui.label("No task");
+                }
+            }
+
             // --- Display Agent's Role & Needs ---
             ui.label("DETAILS:");
-            ui.label(format!("Role: {:?}", agent.role));
             ui.label(format!("Hunger: {:.1}/100", agent.needs.hunger));
             ui.label(format!("Thirst: {:.1}/100", agent.needs.thirst));
             ui.separator();
@@ -162,5 +182,14 @@ pub fn agent_ui_panel_system(
             // --- Display Interaction Queue ---
             ui.label("INTERACTION QUEUE:");
             ui.label(format!("Current size: {:?}", interaction_queue.len()));
+            if let Ok((interacting, waiting_interaction)) = interaction_query.get(selected_entity) {
+                if let Some(_) = interacting {
+                    ui.label("Interacting");
+                } else if let Some(w) = waiting_interaction {
+                    ui.label(format!("Waiting Interaction {}", w.get_resting_duration()));
+                } else {
+                    ui.label("No interaction");
+                }
+            }
         });
 }

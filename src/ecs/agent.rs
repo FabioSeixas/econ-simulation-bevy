@@ -1,18 +1,8 @@
-use crate::{
-    core::{
-        action::*,
-        inventory::*,
-        item::ItemEnum,
-        needs::*,
-        role::{get_random_role, get_seller_role, Role},
-        task::*,
-    },
-    ecs::components::Walking,
-};
+use crate::core::{action::*, inventory::*, item::ItemEnum, needs::*};
 use bevy::prelude::*;
 use std::collections::VecDeque;
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct Agent {
     pub needs: Needs,
     pub inventory: Inventory,

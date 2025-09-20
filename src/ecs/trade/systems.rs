@@ -3,10 +3,12 @@ use bevy::prelude::*;
 use crate::{
     core::item::ItemEnum,
     ecs::{
-        agent::Agent, components::Interacting, trade::{
-            components::{Buying, Selling, TradeInteraction, TradeNegotiation, TradeRole},
+        agent::Agent,
+        components::Interacting,
+        trade::{
+            components::{BuyTask, Buying, Selling, TradeInteraction, TradeNegotiation, TradeRole},
             events::{OfferAgreed, OfferMade, TradeFinalized},
-        }
+        },
     },
     Idle,
 };
@@ -25,6 +27,7 @@ pub fn seller_makes_offer_system(
         if seller_amount == 0 {
             trade_finalized_writer.send(TradeFinalized {
                 target: trade.partner,
+                success: false,
             });
             continue;
         }
@@ -45,7 +48,7 @@ pub fn seller_makes_offer_system(
 
 pub fn buyer_evaluates_offer_system(
     mut buyer_query: Query<
-        (Entity, &Agent, &mut TradeNegotiation),
+        (Entity, &Agent, &TradeNegotiation),
         (With<Buying>, With<TradeNegotiation>, With<Interacting>),
     >,
     mut offer_agreed_writer: EventWriter<OfferAgreed>,
@@ -53,20 +56,33 @@ pub fn buyer_evaluates_offer_system(
     mut trade_finalized_writer: EventWriter<TradeFinalized>,
 ) {
     for event in offer_made_reader.read() {
-        if let Ok((entity, agent, mut trade)) = buyer_query.get_mut(event.target) {
+        if let Ok((entity, agent, trade)) = buyer_query.get_mut(event.target) {
             if agent.inventory.get_qty(ItemEnum::MONEY) >= event.price {
-                trade.quantity = event.quantity;
-                trade.price = Some(event.price);
+                // trade.quantity = event.quantity;
+                // trade.price = Some(event.price);
 
+                println!("buyer_evaluates_offer_system: {:?}", trade);
                 offer_agreed_writer.send(OfferAgreed {
                     target: trade.partner,
+                    price: event.price,
+                    quantity: event.quantity,
                 });
 
-                offer_agreed_writer.send(OfferAgreed { target: entity });
+                offer_agreed_writer.send(OfferAgreed {
+                    target: entity,
+                    price: event.price,
+                    quantity: event.quantity,
+                });
             } else {
                 // TODO: improve (decrease qty, make a new offer...)
                 trade_finalized_writer.send(TradeFinalized {
                     target: trade.partner,
+                    success: false,
+                });
+
+                trade_finalized_writer.send(TradeFinalized {
+                    target: entity,
+                    success: false,
                 });
             }
         } else {
@@ -82,20 +98,19 @@ pub fn handle_offer_agreed_system(
 ) {
     for event in offer_agreed_reader.read() {
         if let Ok((mut agent, trade)) = target_query.get_mut(event.target) {
+            let price = event.price;
+            let quantity = event.quantity;
             if trade.role == TradeRole::Buyer {
-                let price = trade.price.unwrap();
-                agent
-                    .inventory
-                    .remove(ItemEnum::MONEY, price * trade.quantity);
-                agent.inventory.add(trade.item, trade.quantity);
+                agent.inventory.remove(ItemEnum::MONEY, price * quantity);
+                agent.inventory.add(trade.item, quantity);
             } else {
-                let price = trade.price.unwrap();
-                agent.inventory.add(ItemEnum::MONEY, price * trade.quantity);
-                agent.inventory.remove(trade.item, trade.quantity);
+                agent.inventory.add(ItemEnum::MONEY, price * quantity);
+                agent.inventory.remove(trade.item, quantity);
             }
 
             trade_finalized_writer.send(TradeFinalized {
                 target: event.target,
+                success: true,
             });
         } else {
             println!("No target agent found for event: {:?}", event);
@@ -104,18 +119,26 @@ pub fn handle_offer_agreed_system(
 }
 
 pub fn handle_trade_finalized(
-    mut target_query: Query<(&mut Agent, &TradeNegotiation), With<Interacting>>,
+    mut target_query: Query<(&TradeNegotiation, Option<&mut BuyTask>), With<Interacting>>,
     mut trade_finalized_reader: EventReader<TradeFinalized>,
     mut commands: Commands,
 ) {
     for event in trade_finalized_reader.read() {
-        if let Ok((mut agent, trade)) = target_query.get_mut(event.target) {
+        if let Ok((trade, buy_task)) = target_query.get_mut(event.target) {
             if trade.role == TradeRole::Buyer {
-                // agent.pop_current_action();
-                commands
-                    .entity(event.target)
-                    .remove::<(TradeInteraction, Buying)>();
-                commands.entity(event.target).insert(Idle::default());
+                if event.success {
+                    commands
+                        .entity(event.target)
+                        .insert(Idle)
+                        .remove::<(TradeInteraction, Buying, BuyTask)>();
+                } else {
+                    buy_task
+                        .expect("handle_trade_finalized -> buy task must be Some here!")
+                        .add_tried(trade.partner);
+                    commands
+                        .entity(event.target)
+                        .remove::<(TradeInteraction, Buying)>();
+                }
             } else {
                 commands.entity(event.target).remove::<TradeInteraction>();
             }

@@ -5,7 +5,7 @@ use crate::{
     ecs::components::{DurationActionMarker, Interacting},
 };
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct BuyTask {
     pub item: ItemEnum,
     pub qty: usize,
@@ -20,12 +20,33 @@ impl BuyTask {
             tried_sellers: vec![],
         }
     }
+
+    pub fn tried(&self, seller: &Entity) -> bool {
+        self.tried_sellers.contains(seller)
+    }
+
+    pub fn add_tried(&mut self, seller: Entity) {
+        self.tried_sellers.push(seller);
+    }
 }
 
 #[derive(Component)]
 pub struct Buying {
     pub item: ItemEnum,
     pub qty: usize,
+    pub seller: Entity,
+    pub interaction_id: Option<usize>
+}
+
+impl Buying {
+    pub fn from_buy_task(task: &BuyTask, seller: Entity) -> Self {
+        Self {
+            qty: task.qty,
+            item: task.item,
+            seller,
+            interaction_id: None
+        }
+    }
 }
 
 #[derive(Component, Default)]
@@ -36,7 +57,7 @@ pub struct Selling {
 impl Selling {
     pub fn new() -> Self {
         Self {
-            resting_duration: 30.,
+            resting_duration: 15.,
         }
     }
 }

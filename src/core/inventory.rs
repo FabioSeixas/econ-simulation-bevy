@@ -21,7 +21,7 @@ impl Inventory {
     pub fn new() -> Self {
         let mut items = HashMap::new();
 
-        items.insert(ItemEnum::MONEY, 50);
+        items.insert(ItemEnum::MONEY, 10);
 
         Self { items }
     }
@@ -56,11 +56,12 @@ impl Inventory {
             None => 0,
             Some(current_qty) => {
                 if *current_qty < qty {
-                    panic!("Not enought on inventory")
+                    panic!("Not enought {:?} on inventory", id)
                 }
 
                 let rest = *current_qty - qty;
                 self.items.insert(id, rest);
+                print!("removed {} of {:?} from inventory", qty, id);
                 rest
             }
         }

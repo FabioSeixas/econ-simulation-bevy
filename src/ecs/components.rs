@@ -18,7 +18,29 @@ pub struct Idle;
 #[derive(Component, Default, Debug)]
 pub struct Interacting;
 
-#[derive(Component, Default)]
+#[derive(Component, Default, Debug)]
+pub struct WaitingInteraction {
+    resting_duration: f32,
+}
+
+impl WaitingInteraction {
+    pub fn new() -> Self {
+        Self {
+            resting_duration: 5.,
+        }
+    }
+}
+
+impl DurationActionMarker for WaitingInteraction {
+    fn get_resting_duration(&self) -> f32 {
+        self.resting_duration
+    }
+    fn progress(&mut self, time: f32) {
+        self.resting_duration -= time;
+    }
+}
+
+#[derive(Component, Debug)]
 pub struct Walking {
     pub destination: Vec3,
     should_set_idle: bool,
@@ -61,15 +83,6 @@ impl Consuming {
     }
 }
 
-impl ActionMarker for Consuming {
-    fn set_idle_at_completion(&mut self, value: bool) {
-        self.should_set_idle = value;
-    }
-    fn should_set_idle_at_completion(&self) -> bool {
-        self.should_set_idle
-    }
-}
-
 impl DurationActionMarker for Consuming {
     fn get_resting_duration(&self) -> f32 {
         self.resting_duration
@@ -81,7 +94,6 @@ impl DurationActionMarker for Consuming {
 
 #[derive(Component)]
 pub struct ConsumeTask {
-    pub done: bool,
     pub location: Vec3,
     pub item: ItemEnum,
     pub qty: usize,
@@ -91,7 +103,6 @@ impl ConsumeTask {
     pub fn new(item: ItemEnum, qty: usize) -> Self {
         Self {
             location: get_random_vec3(),
-            done: false,
             item,
             qty,
         }
