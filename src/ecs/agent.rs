@@ -1,5 +1,6 @@
 use crate::core::{action::*, inventory::*, item::ItemEnum, needs::*};
 use bevy::prelude::*;
+use rand::Rng;
 use std::collections::VecDeque;
 
 #[derive(Component, Debug)]
@@ -19,8 +20,14 @@ impl Agent {
     }
 
     pub fn new_seller() -> Self {
+        let mut rng = rand::thread_rng();
         let mut inv = Inventory::new();
-        inv.add(ItemEnum::MEAT, 5000);
+
+        if rng.gen_bool(0.5) {
+            inv.add(ItemEnum::MEAT, 5000);
+        } else {
+            inv.add(ItemEnum::WATER, 5000);
+        }
 
         Self {
             needs: Needs::new(),
@@ -33,8 +40,16 @@ impl Agent {
         self.needs.satisfy_hunger();
     }
 
+    pub fn satisfy_thirsty(&mut self) {
+        self.needs.satisfy_thirsty();
+    }
+
     pub fn is_hungry(&self) -> bool {
         self.needs.is_hungry()
+    }
+
+    pub fn is_thirsty(&self) -> bool {
+        self.needs.is_thirsty()
     }
 
     pub fn get_action(&self) -> Option<&Action> {
@@ -47,5 +62,9 @@ impl Agent {
 
     pub fn have_food(&self) -> bool {
         self.inventory.get_qty(ItemEnum::MEAT) > 0
+    }
+
+    pub fn have_drink(&self) -> bool {
+        self.inventory.get_qty(ItemEnum::WATER) > 0
     }
 }

@@ -66,7 +66,6 @@ impl ActionMarker for Walking {
 
 #[derive(Component)]
 pub struct Consuming {
-    should_set_idle: bool,
     resting_duration: f32,
     pub item: ItemEnum,
     pub qty: usize,
@@ -77,7 +76,6 @@ impl Consuming {
         Self {
             item,
             qty,
-            should_set_idle: true,
             resting_duration: 5. * (qty as f32),
         }
     }

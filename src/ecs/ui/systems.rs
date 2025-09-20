@@ -1,3 +1,5 @@
+use std::time::UNIX_EPOCH;
+
 use bevy_egui::{egui, EguiContexts};
 
 use bevy::{
@@ -153,6 +155,7 @@ pub fn agent_ui_panel_system(
                     ui.label("No task");
                 }
             }
+            ui.separator();
 
             // --- Display Agent's Role & Needs ---
             ui.label("DETAILS:");
@@ -199,8 +202,12 @@ pub fn agent_ui_panel_system(
                 .auto_shrink([false; 2]) // optional: prevent shrinking when content is small
                 .show(ui, |ui| {
                     ui.label("LOGS:");
-                    for entry in agent_memory.list() {
-                        ui.label(&entry.description);
+                    for entry in agent_memory.list().iter().rev() {
+                        ui.label(format!(
+                            "{}: {}",
+                            &entry.time.as_secs(),
+                            &entry.description
+                        ));
                     }
                 });
         });

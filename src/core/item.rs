@@ -18,4 +18,11 @@ impl ItemEnum {
             _ => false,
         }
     }
+
+    pub fn is_liquid(&self) -> bool {
+        match self {
+            ItemEnum::WATER => true,
+            _ => false,
+        }
+    }
 }

@@ -45,10 +45,7 @@ fn main() {
             )
                 .chain(),
         )
-        .add_systems(
-            Update,
-            (update_agents, add_logs_system),
-        )
+        .add_systems(Update, (update_agents, add_logs_system))
         .run();
 }
 
@@ -58,7 +55,7 @@ pub fn add_logs_system(
 ) {
     for event in add_logs_reader.read() {
         if let Ok(mut agent_memory) = agent_query.get_mut(event.target) {
-            agent_memory.add(event.entry.clone());
+            agent_memory.add(&event.description);
         }
     }
 }
@@ -224,10 +221,10 @@ fn setup(
 
     let scale = Vec3::splat(1.0);
 
-    for x in 0..3 {
+    for _ in 0..10 {
         let entity_id = commands.spawn_empty().id();
 
-        let v = 100. * x as f32;
+        let v = get_random_vec3();
 
         commands.entity(entity_id).insert((
             Sprite {
@@ -239,14 +236,12 @@ fn setup(
                 ..default()
             },
             Agent::new_seller(),
-            Transform::from_scale(scale).with_translation(Vec3::new(v, v, 0.)),
+            Transform::from_scale(scale).with_translation(v),
             AnimationConfig::new(),
             AgentInteractionQueue::new(),
             Name::new("the happier seller"),
             AgentLogs::new(),
-            SellerRole {
-                location: Vec3::new(v, v, 0.),
-            },
+            SellerRole { location: v },
             Idle,
         ));
 
@@ -285,7 +280,7 @@ fn check_idle_agents_needs(
     for (entity, agent) in &query {
         if agent.is_hungry() {
             if agent.have_food() {
-                add_log_writer.send(AddLogEntry::new(entity, "Start ConsumeTask"));
+                add_log_writer.send(AddLogEntry::new(entity, "Start ConsumeTask (eat)"));
                 commands
                     .entity(entity)
                     .insert(ConsumeTask::new(core::item::ItemEnum::MEAT, 1))
@@ -295,6 +290,20 @@ fn check_idle_agents_needs(
                 commands
                     .entity(entity)
                     .insert(BuyTask::new(core::item::ItemEnum::MEAT, 1))
+                    .remove::<Idle>();
+            }
+        } else if agent.is_thirsty() {
+            if agent.have_drink() {
+                add_log_writer.send(AddLogEntry::new(entity, "Start ConsumeTask (drink)"));
+                commands
+                    .entity(entity)
+                    .insert(ConsumeTask::new(core::item::ItemEnum::WATER, 1))
+                    .remove::<Idle>();
+            } else {
+                add_log_writer.send(AddLogEntry::new(entity, "Start BuyTask (water)"));
+                commands
+                    .entity(entity)
+                    .insert(BuyTask::new(core::item::ItemEnum::WATER, 1))
                     .remove::<Idle>();
             }
         }
@@ -344,6 +353,7 @@ fn handle_buy_task(
                         .entity(buyer)
                         .insert(Buying::from_buy_task(&buy_task, seller.clone()));
                 }
+                break;
             }
         }
 
@@ -482,6 +492,11 @@ fn handle_consuming_action(
         if item.is_food() {
             add_log_writer.send(AddLogEntry::new(entity, "Consume (eat) done"));
             agent.satisfy_hungry();
+        }
+
+        if item.is_liquid() {
+            add_log_writer.send(AddLogEntry::new(entity, "Consume (drink) done"));
+            agent.satisfy_thirsty();
         }
         agent.inventory.remove(item, consuming.qty);
 

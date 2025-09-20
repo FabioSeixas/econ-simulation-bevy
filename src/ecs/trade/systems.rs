@@ -16,18 +16,22 @@ use crate::{
 
 pub fn seller_makes_offer_system(
     mut seller_query: Query<
-        (&Agent, &mut TradeNegotiation),
+        (Entity, &Agent, &mut TradeNegotiation),
         (With<Selling>, Added<TradeNegotiation>, With<Interacting>),
     >,
     mut offer_made_writer: EventWriter<OfferMade>,
     mut trade_finalized_writer: EventWriter<TradeFinalized>,
 ) {
-    for (agent, mut trade) in &mut seller_query {
+    for (seller_entity, agent, mut trade) in &mut seller_query {
         let seller_amount = agent.inventory.get_qty(trade.item);
 
         if seller_amount == 0 {
             trade_finalized_writer.send(TradeFinalized {
                 target: trade.partner,
+                success: false,
+            });
+            trade_finalized_writer.send(TradeFinalized {
+                target: seller_entity,
                 success: false,
             });
             continue;

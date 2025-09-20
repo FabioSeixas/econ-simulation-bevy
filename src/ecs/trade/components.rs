@@ -57,7 +57,7 @@ pub struct Selling {
 impl Selling {
     pub fn new() -> Self {
         Self {
-            resting_duration: 15.,
+            resting_duration: 50.,
         }
     }
 }
