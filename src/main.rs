@@ -9,6 +9,7 @@ use bevy::prelude::*;
 use crate::ecs::agent::*;
 use crate::ecs::components::*;
 use crate::ecs::interaction::*;
+use crate::ecs::logs::*;
 use crate::ecs::roles::none::NoneRole;
 use crate::ecs::roles::seller::SellerRole;
 use crate::ecs::roles::{none::*, seller::*};
@@ -23,47 +24,77 @@ fn main() {
             level: Level::DEBUG, // Set minimum level to show debug logs
             ..default()
         }))
+        .init_resource::<KnowledgeManagement>()
+        .add_event::<AddLogEntry>()
         .add_plugins(TradePlugin)
         .add_plugins(UiPlugin)
-        .init_resource::<KnowledgeManagement>()
         .add_systems(Startup, setup)
         .add_systems(
             Update,
-            (update_agents_and_interrupt_system, check_idle_agents_needs).chain(),
-        )
-        .add_systems(Update, (handle_idle_sellers, handle_idle_none_role))
-        .add_systems(Update, (handle_consume_task, handle_buy_task))
-        .add_systems(
-            Update,
             (
+                check_agent_interaction_queue_system,
+                check_idle_agents_needs,
+                handle_idle_sellers,
+                handle_idle_none_role,
+                handle_consume_task,
+                handle_buy_task,
                 handle_consuming_action,
                 handle_selling_action,
                 handle_walking_action,
                 handle_buy_action,
-            ),
+            )
+                .chain(),
+        )
+        .add_systems(
+            Update,
+            (update_agents, add_logs_system),
         )
         .run();
 }
 
-fn update_agents_and_interrupt_system(
+pub fn add_logs_system(
+    mut agent_query: Query<&mut AgentLogs, With<AgentLogs>>,
+    mut add_logs_reader: EventReader<AddLogEntry>,
+) {
+    for event in add_logs_reader.read() {
+        if let Ok(mut agent_memory) = agent_query.get_mut(event.target) {
+            agent_memory.add(event.entry.clone());
+        }
+    }
+}
+
+fn update_agents(mut query: Query<&mut Agent, With<Agent>>) {
+    for mut agent in &mut query {
+        agent.frame_update();
+    }
+}
+
+fn check_agent_interaction_queue_system(
     mut query: Query<
-        (Entity, &mut Agent, &mut AgentInteractionQueue),
-        (With<Agent>, Without<Interacting>),
+        (Entity, &mut AgentInteractionQueue),
+        (
+            With<Agent>,
+            Without<Interacting>,
+            Without<WaitingInteraction>,
+        ),
     >,
     mut commands: Commands,
+    mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
-    for (entity, mut agent, mut agent_interation_queue) in &mut query {
-        agent.frame_update();
-
+    for (entity, mut agent_interation_queue) in &mut query {
         if !agent_interation_queue.is_empty() {
-            // println!(
-            //     "Current agent queue size: {:?}",
-            //     agent_interation_queue.len()
-            // );
             if let Some(interaction) = agent_interation_queue.pop_first() {
-                // println!("Pop interaction and adding to Agent: {:?}", interaction);
                 match interaction.kind {
                     AgentInteractionKind::Trade(trade_component) => {
+                        add_log_writer.send(AddLogEntry::new(
+                            entity,
+                            format!("Start Trade Interaction with {}", trade_component.partner)
+                                .as_str(),
+                        ));
+                        add_log_writer.send(AddLogEntry::new(
+                            trade_component.partner,
+                            format!("Start Trade Interaction with {}", entity).as_str(),
+                        ));
                         commands
                             .entity(trade_component.partner)
                             .insert(Interacting)
@@ -212,6 +243,7 @@ fn setup(
             AnimationConfig::new(),
             AgentInteractionQueue::new(),
             Name::new("the happier seller"),
+            AgentLogs::new(),
             SellerRole {
                 location: Vec3::new(v, v, 0.),
             },
@@ -221,7 +253,7 @@ fn setup(
         knowledge.add(entity_id);
     }
 
-    for i in 0..80 {
+    for i in 0..150 {
         let entity_id = commands.spawn_empty().id();
 
         commands.entity(entity_id).insert((
@@ -237,6 +269,7 @@ fn setup(
             Transform::from_scale(scale).with_translation(Vec3::new(100., 100., 0.)),
             AnimationConfig::new(),
             AgentInteractionQueue::new(),
+            AgentLogs::new(),
             Name::new(format!("agent_{}", i)),
             NoneRole,
             Idle,
@@ -246,16 +279,19 @@ fn setup(
 
 fn check_idle_agents_needs(
     query: Query<(Entity, &Agent), (With<Idle>, Without<Interacting>)>,
+    mut add_log_writer: EventWriter<AddLogEntry>,
     mut commands: Commands,
 ) {
     for (entity, agent) in &query {
         if agent.is_hungry() {
             if agent.have_food() {
+                add_log_writer.send(AddLogEntry::new(entity, "Start ConsumeTask"));
                 commands
                     .entity(entity)
                     .insert(ConsumeTask::new(core::item::ItemEnum::MEAT, 1))
                     .remove::<Idle>();
             } else {
+                add_log_writer.send(AddLogEntry::new(entity, "Start BuyTask"));
                 commands
                     .entity(entity)
                     .insert(BuyTask::new(core::item::ItemEnum::MEAT, 1))
@@ -279,6 +315,7 @@ fn handle_buy_task(
     >,
     mut query_seller: Query<&SellerRole, With<SellerRole>>,
     mut commands: Commands,
+    mut add_log_writer: EventWriter<AddLogEntry>,
     knowledge: Res<KnowledgeManagement>,
 ) {
     let sellers = knowledge.get_sellers();
@@ -294,10 +331,15 @@ fn handle_buy_task(
 
             if let Ok(seller_role) = query_seller.get_mut(seller.clone()) {
                 if buyer_transform.translation.distance(seller_role.location) > 50. {
+                    add_log_writer.send(AddLogEntry::new(
+                        buyer,
+                        "Starting Walking to the seller location",
+                    ));
                     let mut walking = Walking::new(seller_role.location);
                     walking.set_idle_at_completion(false);
                     commands.entity(buyer).insert(walking);
                 } else {
+                    add_log_writer.send(AddLogEntry::new(buyer, "Start Buying"));
                     commands
                         .entity(buyer)
                         .insert(Buying::from_buy_task(&buy_task, seller.clone()));
@@ -306,7 +348,7 @@ fn handle_buy_task(
         }
 
         if !some_seller_found {
-            println!("Tried all sellers and failed");
+            add_log_writer.send(AddLogEntry::new(buyer, "BuyTask failed"));
             commands
                 .entity(buyer)
                 .insert(Walking::new(get_random_vec3()))
@@ -326,6 +368,7 @@ fn handle_buy_action(
         (With<Buying>, Without<Idle>, Without<Interacting>),
     >,
     mut query_seller: Query<&mut AgentInteractionQueue, With<Selling>>,
+    mut add_log_writer: EventWriter<AddLogEntry>,
     mut commands: Commands,
     time: Res<Time>,
 ) {
@@ -335,6 +378,10 @@ fn handle_buy_action(
                 waiting.progress(time.delta_secs());
             } else {
                 if let Ok(mut seller_interaction_queue) = query_seller.get_mut(buying.seller) {
+                    add_log_writer.send(AddLogEntry::new(
+                        buyer,
+                        "WaitingInteraction timed out, ending Buying",
+                    ));
                     if buying.interaction_id.is_none() {
                         panic!("handle_buy_action, buying.interaction_id must be Some")
                     }
@@ -346,6 +393,10 @@ fn handle_buy_action(
                 }
             }
         } else if let Ok(mut seller_agent_interaction_queue) = query_seller.get_mut(buying.seller) {
+            add_log_writer.send(AddLogEntry::new(
+                buyer,
+                "Seller found, adding TradeNegotiation to the seller queue",
+            ));
             let buyer_trade_marker = TradeNegotiation {
                 role: TradeRole::Buyer,
                 quantity: buying.qty,
@@ -370,7 +421,7 @@ fn handle_buy_action(
 
             buying.interaction_id = Some(id);
         } else {
-            println!("Seller not found");
+            add_log_writer.send(AddLogEntry::new(buyer, "Seller not found, removing Buying"));
             buy_task.add_tried(buying.seller);
             commands.entity(buyer).remove::<Buying>();
         }
@@ -389,13 +440,16 @@ fn handle_consume_task(
         ),
     >,
     mut commands: Commands,
+    mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
     for (entity, transform, consume_task) in &mut query {
         if consume_task.location.distance(transform.translation) > 50. {
+            add_log_writer.send(AddLogEntry::new(entity, "Start Walking to consume"));
             let mut walking = Walking::new(consume_task.location);
             walking.set_idle_at_completion(false);
             commands.entity(entity).insert(walking).remove::<Idle>();
         } else {
+            add_log_writer.send(AddLogEntry::new(entity, "Start Consuming"));
             commands
                 .entity(entity)
                 .insert(Consuming::new(consume_task.item, consume_task.qty))
@@ -416,6 +470,7 @@ fn handle_consuming_action(
     >,
     time: Res<Time>,
     mut commands: Commands,
+    mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
     for (entity, mut agent, mut consuming) in &mut query {
         if consuming.get_resting_duration() > 0. {
@@ -425,9 +480,9 @@ fn handle_consuming_action(
 
         let item = consuming.item.clone();
         if item.is_food() {
+            add_log_writer.send(AddLogEntry::new(entity, "Consume (eat) done"));
             agent.satisfy_hungry();
         }
-        println!("will remove food after consuming");
         agent.inventory.remove(item, consuming.qty);
 
         commands
@@ -450,12 +505,14 @@ fn handle_walking_action(
     >,
     time: Res<Time>,
     mut commands: Commands,
+    mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
     for (entity, mut transform, config, mut sprite, walking) in &mut query {
         if walking.destination.distance(transform.translation) > 50. {
             let mut direction = (walking.destination - transform.translation).normalize();
             movement(&mut direction, &mut transform, &config, &mut sprite, &time);
         } else {
+            add_log_writer.send(AddLogEntry::new(entity, "Walking finished with success"));
             if walking.should_set_idle_at_completion() {
                 commands.entity(entity).insert(Idle).remove::<Walking>();
             } else {

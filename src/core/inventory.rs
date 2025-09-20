@@ -21,7 +21,7 @@ impl Inventory {
     pub fn new() -> Self {
         let mut items = HashMap::new();
 
-        items.insert(ItemEnum::MONEY, 10);
+        items.insert(ItemEnum::MONEY, 20);
 
         Self { items }
     }

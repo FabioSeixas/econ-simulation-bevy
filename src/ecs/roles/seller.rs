@@ -2,6 +2,7 @@ use bevy::{
     ecs::{
         component::Component,
         entity::Entity,
+        event::EventWriter,
         query::{With, Without},
         system::{Commands, Query, Res},
     },
@@ -12,6 +13,7 @@ use bevy::{
 
 use crate::ecs::{
     components::{DurationActionMarker, Idle, Interacting, Walking},
+    logs::AddLogEntry,
     trade::components::Selling,
 };
 
@@ -26,14 +28,20 @@ pub fn handle_idle_sellers(
         (With<SellerRole>, With<Idle>, Without<Selling>),
     >,
     mut commands: Commands,
+    mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
     for (entity, &transform, seller_role) in &query {
         if seller_role.location.distance(transform.translation) > 50. {
+            add_log_writer.send(AddLogEntry::new(
+                entity,
+                "Role -> Start Walking to sell location",
+            ));
             commands
                 .entity(entity)
                 .insert(Walking::new(seller_role.location))
                 .remove::<Idle>();
         } else {
+            add_log_writer.send(AddLogEntry::new(entity, "Start Selling"));
             commands
                 .entity(entity)
                 .insert(Selling::new())

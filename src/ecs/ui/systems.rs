@@ -18,6 +18,7 @@ use crate::{
     ecs::{
         agent::*,
         components::{ConsumeTask, DurationActionMarker, Idle},
+        logs::AgentLogs,
         trade::components::{BuyTask, Buying, TradeNegotiation},
     },
     AgentInteractionQueue, Walking,
@@ -89,7 +90,7 @@ pub fn agent_ui_panel_system(
     mut contexts: EguiContexts,
     selected_agent: Res<SelectedAgent>,
     // We need queries for all the data we want to display
-    agent_query: Query<(&Agent, &Name, &AgentInteractionQueue)>,
+    agent_query: Query<(&Agent, &Name, &AgentInteractionQueue, &AgentLogs)>,
     // Queries for action/state components
     idle_query: Query<&Idle>,
     walking_query: Query<&Walking>,
@@ -106,7 +107,8 @@ pub fn agent_ui_panel_system(
     };
 
     // Attempt to get the main agent data. If this fails, the entity might have been despawned.
-    let Ok((agent, name, interaction_queue)) = agent_query.get(selected_entity) else {
+    let Ok((agent, name, interaction_queue, agent_memory)) = agent_query.get(selected_entity)
+    else {
         return;
     };
 
@@ -191,5 +193,15 @@ pub fn agent_ui_panel_system(
                     ui.label("No interaction");
                 }
             }
+            ui.separator();
+
+            egui::ScrollArea::vertical()
+                .auto_shrink([false; 2]) // optional: prevent shrinking when content is small
+                .show(ui, |ui| {
+                    ui.label("LOGS:");
+                    for entry in agent_memory.list() {
+                        ui.label(&entry.description);
+                    }
+                });
         });
 }

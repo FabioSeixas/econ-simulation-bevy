@@ -5,6 +5,7 @@ use crate::{
     ecs::{
         agent::Agent,
         components::Interacting,
+        logs::AddLogEntry,
         trade::{
             components::{BuyTask, Buying, Selling, TradeInteraction, TradeNegotiation, TradeRole},
             events::{OfferAgreed, OfferMade, TradeFinalized},
@@ -122,16 +123,25 @@ pub fn handle_trade_finalized(
     mut target_query: Query<(&TradeNegotiation, Option<&mut BuyTask>), With<Interacting>>,
     mut trade_finalized_reader: EventReader<TradeFinalized>,
     mut commands: Commands,
+    mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
     for event in trade_finalized_reader.read() {
         if let Ok((trade, buy_task)) = target_query.get_mut(event.target) {
             if trade.role == TradeRole::Buyer {
                 if event.success {
+                    add_log_writer.send(AddLogEntry::new(
+                        event.target,
+                        format!("Trade with {} finished with success", trade.partner).as_str(),
+                    ));
                     commands
                         .entity(event.target)
                         .insert(Idle)
                         .remove::<(TradeInteraction, Buying, BuyTask)>();
                 } else {
+                    add_log_writer.send(AddLogEntry::new(
+                        event.target,
+                        format!("Trade with {} finished with FAILURE", trade.partner).as_str(),
+                    ));
                     buy_task
                         .expect("handle_trade_finalized -> buy task must be Some here!")
                         .add_tried(trade.partner);
@@ -140,6 +150,8 @@ pub fn handle_trade_finalized(
                         .remove::<(TradeInteraction, Buying)>();
                 }
             } else {
+                let description = format!("Trade with {} finished", trade.partner);
+                add_log_writer.send(AddLogEntry::new(event.target, description.as_str()));
                 commands.entity(event.target).remove::<TradeInteraction>();
             }
         } else {
