@@ -379,7 +379,7 @@ fn handle_buy_task(
         if !some_seller_found {
             add_log_writer.send(AddLogEntry::new(
                 buyer,
-                "Not seller found. BuyTask failed. Walking around",
+                "No seller found. BuyTask failed. Walking around",
             ));
             commands
                 .entity(buyer)

@@ -4,6 +4,8 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use rand::Rng;
+
 use crate::{core::item::ItemEnum, ecs::agent::Agent};
 
 #[derive(Component)]
@@ -13,6 +15,10 @@ pub struct AgentKnowledge {
 }
 
 impl AgentKnowledge {
+    pub fn add(&mut self, id: KnowledgeId) {
+        self.known.insert(id);
+    }
+
     pub fn get_sellers_of(&self, item: &ItemEnum) -> Vec<Entity> {
         let mut sellers = vec![];
         for id in self.known.iter() {
@@ -103,6 +109,19 @@ impl SharedKnowledge {
         let keys_vec: Vec<KnowledgeId> = knowledge_lock.facts.keys().cloned().collect();
         keys_vec.into_iter()
     }
+
+    pub fn get_one_random(&self) -> KnowledgeId {
+        let mut rnd = rand::thread_rng();
+        let knowledge_lock = self.0.read().expect("fail to read on base_knowledge");
+        let max = knowledge_lock.facts.len();
+        let idx = rnd.gen_range(0..max);
+        knowledge_lock
+            .facts
+            .keys()
+            .nth(idx)
+            .expect("Fail to get one random knowledge on base knowledge")
+            .clone()
+    }
 }
 
 /// The plugin that sets everything up
@@ -125,7 +144,8 @@ fn attach_agent_knowledge(
     for entity in &query {
         commands.entity(entity).insert(AgentKnowledge {
             base_knowledge: shared.clone_base_knowledge(),
-            known: HashSet::from_iter(shared.get_all()),
+            // known: HashSet::from_iter(shared.get_all()),
+            known: HashSet::from([shared.get_one_random()]),
         });
     }
 }
