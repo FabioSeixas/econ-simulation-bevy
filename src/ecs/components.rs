@@ -41,6 +41,11 @@ impl DurationActionMarker for WaitingInteraction {
 }
 
 #[derive(Component, Debug)]
+pub struct InteractionWalking {
+    pub destination: Vec3,
+}
+
+#[derive(Component, Debug)]
 pub struct Walking {
     pub destination: Vec3,
     should_set_idle: bool,
