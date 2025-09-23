@@ -51,7 +51,6 @@ impl Inventory {
 
                 let rest = *current_qty - qty;
                 self.items.insert(id, rest);
-                print!("removed {} of {:?} from inventory", qty, id);
                 rest
             }
         }

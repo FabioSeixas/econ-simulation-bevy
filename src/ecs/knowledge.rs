@@ -19,7 +19,7 @@ impl AgentKnowledge {
         self.known.insert(id);
     }
 
-    pub fn get_sellers_of(&self, item: &ItemEnum) -> Vec<Entity> {
+    pub fn get_sellers_of(&self, item: &ItemEnum) -> Vec<(Entity, KnowledgeId)> {
         let mut sellers = vec![];
         for id in self.known.iter() {
             if let Some(knowledge) = self
@@ -30,7 +30,7 @@ impl AgentKnowledge {
             {
                 if let KnowledgeFact::SellerInfo { wares, entity, .. } = knowledge {
                     if wares.contains(item) {
-                        sellers.push(entity)
+                        sellers.push((entity, id.clone()));
                     }
                 }
             }
@@ -56,7 +56,7 @@ pub enum KnowledgeFact {
     // PointOfInterest { name: String, location: Vec3 },
 }
 
-type KnowledgeId = u32;
+pub type KnowledgeId = u32;
 
 /// The singleton knowledge base content
 #[derive(Debug)]

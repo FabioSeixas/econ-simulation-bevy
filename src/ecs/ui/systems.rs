@@ -1,5 +1,3 @@
-use std::time::UNIX_EPOCH;
-
 use bevy_egui::{egui, EguiContexts};
 
 use bevy::{
@@ -20,6 +18,8 @@ use crate::{
     ecs::{
         agent::*,
         components::{ConsumeTask, DurationActionMarker, Idle},
+        interaction::{KnowledgeSharing, KnowledgeSharingInteraction, ObtainKnowledgeTask},
+        knowledge,
         logs::AgentLogs,
         trade::components::{BuyTask, Buying, TradeNegotiation},
     },
@@ -40,7 +40,7 @@ pub fn agent_selection_system(
     window_query: Query<&Window, With<PrimaryWindow>>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    agent_query: Query<(Entity, &Transform)>,
+    agent_query: Query<(Entity, &Name, &Transform)>,
 ) {
     if !mouse_buttons.just_pressed(MouseButton::Left) {
         return;
@@ -69,13 +69,13 @@ pub fn agent_selection_system(
 
     if let Some(world_pos) = world_pos {
         let mut clicked_on_agent = false;
-        for (agent_entity, agent_transform) in &agent_query {
+        for (agent_entity, name, agent_transform) in &agent_query {
             // The rest of the logic is the same, just using the new world_pos
             let distance = world_pos
                 .truncate()
                 .distance(agent_transform.translation.truncate());
             if distance < 32.0 {
-                println!("Selected agent {:?}", agent_entity);
+                println!("Selected agent {:?} - {:?}", agent_entity, name);
                 selected_agent.entity = Some(agent_entity);
                 clicked_on_agent = true;
                 break;
@@ -91,17 +91,21 @@ pub fn agent_selection_system(
 pub fn agent_ui_panel_system(
     mut contexts: EguiContexts,
     selected_agent: Res<SelectedAgent>,
-    // We need queries for all the data we want to display
     agent_query: Query<(&Agent, &Name, &AgentInteractionQueue, &AgentLogs)>,
-    // Queries for action/state components
-    idle_query: Query<&Idle>,
-    walking_query: Query<&Walking>,
-    buying_query: Query<&Buying>,
-    selling_query: Query<&Selling>,
-    consuming_query: Query<&Consuming>,
-    trade_query: Query<&TradeNegotiation>, // The active interaction component
-    task_query: Query<(Option<&BuyTask>, Option<&ConsumeTask>)>,
+    action_query: Query<(
+        Option<&Idle>,
+        Option<&Consuming>,
+        Option<&Selling>,
+        Option<&Buying>,
+        Option<&Walking>,
+    )>,
+    task_query: Query<(
+        Option<&BuyTask>,
+        Option<&ConsumeTask>,
+        Option<&ObtainKnowledgeTask>,
+    )>,
     interaction_query: Query<(Option<&Interacting>, Option<&WaitingInteraction>)>,
+    interaction_data_query: Query<(Option<&TradeNegotiation>, Option<&KnowledgeSharingInteraction>, Option<&KnowledgeSharing>)>,
 ) {
     // Check if an agent is selected. If not, we don't draw anything.
     let Some(selected_entity) = selected_agent.entity else {
@@ -114,45 +118,81 @@ pub fn agent_ui_panel_system(
         return;
     };
 
-    // --- This is where we define the UI panel ---
     egui::SidePanel::right("agent_info_panel")
         .default_width(250.0)
         .show(contexts.ctx_mut(), |ui| {
             ui.heading(format!("Inspector: {}", name.as_str()));
             ui.separator();
 
-            // --- Display Current Status ---
-            ui.label("CURRENT STATUS:");
-            let status_text = if idle_query.get(selected_entity).is_ok() {
-                "State: Idle 😴".to_string()
-            } else if let Ok(walking) = walking_query.get(selected_entity) {
-                format!(
-                    "State: Walking to [{:.1}, {:.1}] 🚶",
-                    walking.destination.x, walking.destination.y
-                )
-            } else if buying_query.get(selected_entity).is_ok() {
-                "State: Preparing to Buy 🛒".to_string()
-            } else if selling_query.get(selected_entity).is_ok() {
-                "State: Selling 💰".to_string()
-            } else if consuming_query.get(selected_entity).is_ok() {
-                "State: Consuming 🍔".to_string()
-            } else if let Ok(trade) = trade_query.get(selected_entity) {
-                format!("State: Trading ({:?}) 🤝", trade)
-            } else {
-                "State: Unknown".to_string()
-            };
-            ui.label(status_text);
+            ui.label("CURRENT MARKERS:");
+            if let Ok((idle, consuming, selling, buying, walking)) =
+                action_query.get(selected_entity)
+            {
+                if let Some(_) = idle {
+                    ui.label("State: Idle 😴".to_string());
+                }
+
+                if let Some(_) = consuming {
+                    ui.label("State: Consuming 🍔".to_string());
+                }
+
+                if let Some(_) = selling {
+                    ui.label("State: Selling 💰".to_string());
+                }
+
+                if let Some(_) = buying {
+                    ui.label("State: Buying 🛒".to_string());
+                }
+
+                if let Some(w) = walking {
+                    ui.label(format!(
+                        "State: Walking to [{:.1}, {:.1}] 🚶",
+                        w.destination.x, w.destination.y
+                    ));
+                }
+            }
             ui.separator();
 
-            // --- Display Task ---
             ui.label("CURRENT TASK:");
-            if let Ok((buy, consume)) = task_query.get(selected_entity) {
+            if let Ok((buy, consume, knowledge)) = task_query.get(selected_entity) {
                 if let Some(_) = buy {
                     ui.label("Buy Task");
-                } else if let Some(_) = consume {
+                }
+
+                if let Some(_) = consume {
                     ui.label("Consume Task");
-                } else {
-                    ui.label("No task");
+                }
+
+                if let Some(_) = knowledge {
+                    ui.label("ObtainKnowledgeTask Task");
+                }
+            }
+            ui.separator();
+
+            ui.label("CURRENT Interaction:");
+            if let Ok((interacting, waiting_interaction)) = interaction_query.get(selected_entity) {
+                if let Some(_) = interacting {
+                    ui.label("Interacting");
+                }
+
+                if let Some(w) = waiting_interaction {
+                    ui.label(format!("Waiting Interaction {}", w.get_resting_duration()));
+                }
+            }
+            ui.separator();
+
+            ui.label("CURRENT Interaction Data:");
+            if let Ok((trade, knowledge_interaction, knowledge)) = interaction_data_query.get(selected_entity) {
+                if let Some(_) = trade {
+                    ui.label("TradeNegotiation");
+                }
+
+                if let Some(_) = knowledge {
+                    ui.label("KnowledgeSharing");
+                }
+
+                if let Some(_) = knowledge_interaction {
+                    ui.label("KnowledgeSharingInteraction");
                 }
             }
             ui.separator();
@@ -174,28 +214,9 @@ pub fn agent_ui_panel_system(
             }
             ui.separator();
 
-            // --- Display Next Action in Plan ---
-            ui.label("ACTION PLAN:");
-            if let Some(next_action) = agent.get_action() {
-                // Assuming you still have this for planning
-                ui.label(format!("- {:?}", next_action));
-            } else {
-                ui.label("- No current plan");
-            }
-            ui.separator();
-
             // --- Display Interaction Queue ---
             ui.label("INTERACTION QUEUE:");
             ui.label(format!("Current size: {:?}", interaction_queue.len()));
-            if let Ok((interacting, waiting_interaction)) = interaction_query.get(selected_entity) {
-                if let Some(_) = interacting {
-                    ui.label("Interacting");
-                } else if let Some(w) = waiting_interaction {
-                    ui.label(format!("Waiting Interaction {}", w.get_resting_duration()));
-                } else {
-                    ui.label("No interaction");
-                }
-            }
             ui.separator();
 
             egui::ScrollArea::vertical()
@@ -203,11 +224,7 @@ pub fn agent_ui_panel_system(
                 .show(ui, |ui| {
                     ui.label("LOGS:");
                     for entry in agent_memory.list().iter().rev() {
-                        ui.label(format!(
-                            "{}: {}",
-                            &entry.time.as_secs(),
-                            &entry.description
-                        ));
+                        ui.label(format!("{}: {}", &entry.time.as_secs(), &entry.description));
                     }
                 });
         });

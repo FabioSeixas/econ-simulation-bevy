@@ -17,6 +17,7 @@ use crate::ecs::logs::*;
 use crate::ecs::roles::none::NoneRole;
 use crate::ecs::roles::seller::SellerRole;
 use crate::ecs::roles::{none::*, seller::*};
+use crate::ecs::talk::ask::plugin::AskPlugin;
 use crate::ecs::trade::components::*;
 use crate::ecs::trade::plugin::TradePlugin;
 use crate::ecs::ui::plugin::UiPlugin;
@@ -31,6 +32,7 @@ fn main() {
         .add_event::<AddLogEntry>()
         .add_plugins(TradePlugin)
         .add_plugins(KnowledgePlugin)
+        .add_plugins(AskPlugin)
         .add_plugins(UiPlugin)
         .add_systems(Startup, setup)
         .add_systems(
@@ -46,6 +48,8 @@ fn main() {
                 handle_selling_action,
                 handle_walking_action,
                 handle_buy_action,
+                obtain_knowledge_system,
+                start_interaction_system,
             )
                 .chain(),
         )
@@ -58,8 +62,8 @@ pub fn add_logs_system(
     mut add_logs_reader: EventReader<AddLogEntry>,
 ) {
     for event in add_logs_reader.read() {
-        if let Ok(mut agent_memory) = agent_query.get_mut(event.target) {
-            agent_memory.add(&event.description);
+        if let Ok(mut agent_logs) = agent_query.get_mut(event.target) {
+            agent_logs.add(&event.description);
         }
     }
 }
@@ -67,69 +71,108 @@ pub fn add_logs_system(
 pub fn obtain_knowledge_system(
     mut source_agent_query: Query<
         (Entity, &Transform, &mut ObtainKnowledgeTask),
-        With<ObtainKnowledgeTask>,
+        (
+            With<ObtainKnowledgeTask>,
+            Without<Interacting>,
+            Without<WaitingInteraction>,
+        ),
     >,
     mut target_agent_query: Query<(Entity, &Transform, &mut AgentInteractionQueue), With<Agent>>,
     mut add_log_writer: EventWriter<AddLogEntry>,
     mut commands: Commands,
 ) {
     for (source_entity, source_transform, mut obtain_knowledge_task) in &mut source_agent_query {
-        match obtain_knowledge_task.state {
-            ObtainKnowledgeTaskState::SearchTarget => {
-                let mut best: Option<(Entity, f32)> = None;
-                for (entity, target_transform, _) in &target_agent_query {
-                    let d2 = source_transform
-                        .translation
-                        .distance_squared(target_transform.translation);
-                    // TODO: set a maximum acceptable distance
-                    match best {
-                        None => best = Some((entity, d2)),
-                        Some((_, best_d2)) if d2 < best_d2 => best = Some((entity, d2)),
-                        _ => {}
+        if obtain_knowledge_task.current_interaction.is_some() {
+            continue;
+        }
+
+        let mut best: Option<(Entity, f32)> = None;
+        for (entity, target_transform, _) in &target_agent_query {
+            if entity.eq(&source_entity) {
+                continue;
+            } 
+            if obtain_knowledge_task.tried.contains(&entity) {
+                continue;
+            }
+
+            let d2 = source_transform
+                .translation
+                .distance_squared(target_transform.translation);
+
+            // TODO: set a maximum acceptable distance
+            match best {
+                None => best = Some((entity, d2)),
+                Some((_, best_d2)) => {
+                    if d2 < best_d2 {
+                        best = Some((entity, d2))
                     }
-                }
-
-                if let Some((closest_entity, _)) = best {
-                    if let Ok((_, _, mut agent_interation_queue)) =
-                        target_agent_query.get_mut(closest_entity)
-                    {
-                        add_log_writer.send(AddLogEntry::new(
-                            source_entity,
-                            format!("Sent Ask Interaction request for {}", closest_entity).as_str(),
-                        ));
-
-                        obtain_knowledge_task.current_interaction = Some((
-                            agent_interation_queue
-                                .add(AgentInteractionKind::Ask(obtain_knowledge_task.content)),
-                            closest_entity,
-                        ));
-
-                        commands
-                            .entity(source_entity)
-                            .insert(WaitingInteraction::new());
-
-                        obtain_knowledge_task.state = ObtainKnowledgeTaskState::FoundTarget;
-                    }
-                } else {
-                    // TODO
-                    info!("no agents found");
                 }
             }
-            ObtainKnowledgeTaskState::FoundTarget => {
-                if let Some((_, target_entity)) = obtain_knowledge_task.current_interaction {
-                    if let Ok((_, target_transform, _)) = target_agent_query.get_mut(target_entity)
-                    {
-                        // TODO: check if they are already close to each other
-                        commands.entity(source_entity).insert(InteractionWalking {
-                            destination: target_transform.translation,
-                        });
-                    }
+        }
 
-                    obtain_knowledge_task.state = ObtainKnowledgeTaskState::WalkingToTarget;
+        if let Some((closest_entity, _)) = best {
+            if let Ok((_, _, mut agent_interation_queue)) =
+                target_agent_query.get_mut(closest_entity)
+            {
+                add_log_writer.send(AddLogEntry::new(
+                    source_entity,
+                    format!("Sent Ask Interaction request for {}", closest_entity).as_str(),
+                ));
+
+                obtain_knowledge_task.current_interaction = Some((
+                    agent_interation_queue.add(AgentInteractionKind::Ask(
+                        KnowledgeSharingInteraction {
+                            seller_of: obtain_knowledge_task.content.seller_of,
+                            partner: source_entity,
+                        },
+                    )),
+                    closest_entity,
+                ));
+
+                commands
+                    .entity(source_entity)
+                    .insert(WaitingInteraction::new());
+            }
+        } else {
+            // TODO
+            info!("no agents found");
+        }
+    }
+}
+
+pub fn start_interaction_system(
+    mut source_agent_query: Query<
+        (Entity, &Transform, &mut ObtainKnowledgeTask),
+        (
+            With<ObtainKnowledgeTask>,
+            With<WaitingInteraction>,
+            Without<Walking>,
+            Without<Interacting>,
+        ),
+    >,
+    mut target_agent_query: Query<(Entity, &Transform, &mut AgentInteractionQueue), With<Agent>>,
+    mut add_log_writer: EventWriter<AddLogEntry>,
+    mut commands: Commands,
+) {
+    for (source_entity, source_transform, obtain_knowledge_task) in &mut source_agent_query {
+        if let Some((_, target_entity)) = obtain_knowledge_task.current_interaction {
+            if let Ok((_, target_transform, _)) = target_agent_query.get_mut(target_entity) {
+                if source_transform
+                    .translation
+                    .distance(target_transform.translation)
+                    > 50.
+                {
+                    add_log_writer.send(AddLogEntry::new(
+                        source_entity,
+                        format!("Walking to for {}", target_entity).as_str(),
+                    ));
+                    let mut walking = Walking::new(
+                        (target_transform.translation - source_transform.translation).normalize(),
+                    );
+                    walking.set_idle_at_completion(false);
+                    commands.entity(source_entity).insert(walking);
                 }
             }
-            ObtainKnowledgeTaskState::WalkingToTarget => {},
-            ObtainKnowledgeTaskState::Interacting => {},
         }
     }
 }
@@ -142,33 +185,40 @@ fn update_agents(mut query: Query<&mut Agent, With<Agent>>) {
 
 fn check_agent_interaction_queue_system(
     mut query: Query<
-        (Entity, &mut AgentInteractionQueue),
+        (Entity, &Name, &mut AgentInteractionQueue),
         (
             With<Agent>,
             Without<Interacting>,
-            Without<WaitingInteraction>,
+            // Without<WaitingInteraction>,
         ),
     >,
     mut commands: Commands,
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
-    for (entity, mut agent_interation_queue) in &mut query {
+    for (entity, name, mut agent_interation_queue) in &mut query {
         if !agent_interation_queue.is_empty() {
             if let Some(interaction) = agent_interation_queue.pop_first() {
                 match interaction.kind {
                     AgentInteractionKind::Ask(sharing) => {
                         add_log_writer.send(AddLogEntry::new(
                             entity,
-                            format!("Start Ask Interaction with {}", sharing.partner).as_str(),
+                            format!("Received Ask Interaction from {}", sharing.partner).as_str(),
                         ));
                         add_log_writer.send(AddLogEntry::new(
                             sharing.partner,
-                            format!("Start Ask Interaction with {}", entity).as_str(),
+                            format!("Start Ask Interaction with target {}", name).as_str(),
                         ));
                         commands
                             .entity(sharing.partner)
-                            .insert((Interacting, sharing))
+                            .insert((
+                                Interacting,
+                                KnowledgeSharingInteraction {
+                                    seller_of: sharing.seller_of,
+                                    partner: entity,
+                                },
+                            ))
                             .remove::<WaitingInteraction>();
+
                         commands.entity(entity).insert((Interacting, sharing));
                     }
                     AgentInteractionKind::Trade(trade_component) => {
@@ -446,12 +496,13 @@ fn handle_buy_task(
                 .entity(buyer)
                 .insert(ObtainKnowledgeTask::new(KnowledgeSharing {
                     seller_of: buy_task.item,
-                    partner: buyer,
                 }))
                 .remove::<BuyTask>();
+
+            continue;
         }
 
-        for seller in known_sellers {
+        for (seller, _) in known_sellers {
             if buy_task.tried(&seller) {
                 continue;
             }
@@ -656,32 +707,6 @@ fn handle_walking_action(
             } else {
                 commands.entity(entity).remove::<Walking>();
             }
-        }
-    }
-}
-
-fn handle_interaction_walking_action(
-    mut query: Query<
-        (
-            Entity,
-            &mut Transform,
-            &AnimationConfig,
-            &mut Sprite,
-            &InteractionWalking,
-        ),
-        (With<InteractionWalking>, Without<Idle>),
-    >,
-    time: Res<Time>,
-    mut commands: Commands,
-    mut add_log_writer: EventWriter<AddLogEntry>,
-) {
-    for (entity, mut transform, config, mut sprite, walking) in &mut query {
-        if walking.destination.distance(transform.translation) > 50. {
-            let mut direction = (walking.destination - transform.translation).normalize();
-            movement(&mut direction, &mut transform, &config, &mut sprite, &time);
-        } else {
-            add_log_writer.send(AddLogEntry::new(entity, "Walking finished with success"));
-            commands.entity(entity).remove::<InteractionWalking>();
         }
     }
 }

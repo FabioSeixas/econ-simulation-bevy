@@ -66,7 +66,6 @@ pub fn buyer_evaluates_offer_system(
                 // trade.quantity = event.quantity;
                 // trade.price = Some(event.price);
 
-                println!("buyer_evaluates_offer_system: {:?}", trade);
                 offer_agreed_writer.send(OfferAgreed {
                     target: trade.partner,
                     price: event.price,

@@ -1,9 +1,6 @@
 use bevy::ecs::{component::Component, entity::Entity};
 
-use crate::{
-    core::item::ItemEnum,
-    ecs::{knowledge, trade::components::TradeNegotiation},
-};
+use crate::{core::item::ItemEnum, ecs::trade::components::TradeNegotiation};
 
 #[derive(Debug)]
 pub struct AgentInteractionEvent {
@@ -14,11 +11,16 @@ pub struct AgentInteractionEvent {
 #[derive(Debug)]
 pub enum AgentInteractionKind {
     Trade(TradeNegotiation),
-    Ask(KnowledgeSharing),
+    Ask(KnowledgeSharingInteraction),
 }
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct KnowledgeSharing {
+    pub seller_of: ItemEnum,
+}
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct KnowledgeSharingInteraction {
     pub seller_of: ItemEnum,
     pub partner: Entity,
 }
@@ -30,16 +32,8 @@ pub struct ObtainKnowledgeTask {
     pub content: KnowledgeSharing,
     pub tried: Vec<Entity>,
     pub current_interaction: Option<(InteractionId, Entity)>,
-    pub state: ObtainKnowledgeTaskState,
 }
 
-#[derive(Debug)]
-pub enum ObtainKnowledgeTaskState {
-    SearchTarget,
-    FoundTarget,
-    WalkingToTarget,
-    Interacting,
-}
 
 impl ObtainKnowledgeTask {
     pub fn new(knowledge: KnowledgeSharing) -> Self {
@@ -47,7 +41,6 @@ impl ObtainKnowledgeTask {
             content: knowledge,
             tried: vec![],
             current_interaction: None,
-            state: ObtainKnowledgeTaskState::SearchTarget
         }
     }
 }
