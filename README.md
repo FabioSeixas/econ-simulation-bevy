@@ -13,6 +13,7 @@ just check if AgentState holds the value the system is expecting before moving o
 #[require(AgentState(|| AgentState::Idle))]
 #[require(AgentState(|| AgentState::Task))]
 #[require(AgentState(|| AgentState::Action))]
+#[require(AgentState(|| AgentState::Interacting))]
 
 ```
 3. Global Resource Interrupt with some internal data HashMap<Entity, dyn X>. This dyn X is anything the Agent
