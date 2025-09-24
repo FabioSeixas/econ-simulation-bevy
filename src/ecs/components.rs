@@ -19,6 +19,22 @@ pub struct Task;
 #[derive(Component, Default)]
 pub struct Action;
 
+#[derive(Component, Default, PartialEq, Eq)]
+pub enum AgentState {
+    #[default]
+    Idle,
+    Tasking,
+    Acting,
+    Interacting(InteractingStep),
+}
+
+#[derive(Component, Default, PartialEq, Eq)]
+pub enum InteractingStep {
+    #[default]
+    Waiting,
+    Happening
+}
+
 #[derive(Component, Default, Debug)]
 pub struct Interacting;
 

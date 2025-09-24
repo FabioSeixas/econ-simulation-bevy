@@ -73,58 +73,63 @@ fn update_agents(mut query: Query<&mut Agent, With<Agent>>) {
 
 fn check_agent_interaction_queue_system(
     mut query: Query<
-        (Entity, &Name, &mut AgentInteractionQueue),
+        (Entity, &Name, &AgentState, &mut AgentInteractionQueue),
         (
             With<Agent>,
-            Without<Interacting>,
+            // Without<Interacting>,
             // Without<WaitingInteraction>,
         ),
     >,
     mut commands: Commands,
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
-    for (entity, name, mut agent_interation_queue) in &mut query {
+    for (target_entity, name, target_agent_state, mut agent_interation_queue) in &mut query {
+        if matches!(*target_agent_state, AgentState::Interacting(_)) {
+            continue;
+        }
+
         if !agent_interation_queue.is_empty() {
             if let Some(interaction) = agent_interation_queue.pop_first() {
                 match interaction.kind {
                     AgentInteractionKind::Ask(sharing) => {
                         add_log_writer.send(AddLogEntry::new(
-                            entity,
+                            target_entity,
                             format!("Received Ask Interaction from {}", sharing.partner).as_str(),
                         ));
                         add_log_writer.send(AddLogEntry::new(
                             sharing.partner,
                             format!("Start Ask Interaction with target {}", name).as_str(),
                         ));
-                        commands
-                            .entity(sharing.partner)
-                            .insert((
-                                Interacting,
-                                KnowledgeSharingInteraction {
-                                    seller_of: sharing.seller_of,
-                                    partner: entity,
-                                },
-                            ))
-                            .remove::<WaitingInteraction>();
+                        commands.entity(sharing.partner).insert((
+                            AgentState::Interacting(InteractingStep::Happening),
+                            KnowledgeSharingInteraction {
+                                seller_of: sharing.seller_of,
+                                partner: target_entity,
+                            },
+                        ));
+                        // .remove::<WaitingInteraction>();
 
-                        commands.entity(entity).insert((Interacting, sharing));
+                        commands
+                            .entity(target_entity)
+                            .insert((sharing, AgentState::Interacting(InteractingStep::Happening)));
+                        //.insert((Interacting, sharing));
                     }
                     AgentInteractionKind::Trade(trade_component) => {
                         add_log_writer.send(AddLogEntry::new(
-                            entity,
+                            target_entity,
                             format!("Start Trade Interaction with {}", trade_component.partner)
                                 .as_str(),
                         ));
                         add_log_writer.send(AddLogEntry::new(
                             trade_component.partner,
-                            format!("Start Trade Interaction with {}", entity).as_str(),
+                            format!("Start Trade Interaction with {}", target_entity).as_str(),
                         ));
                         commands
                             .entity(trade_component.partner)
                             .insert(Interacting)
                             .remove::<WaitingInteraction>();
                         commands
-                            .entity(entity)
+                            .entity(target_entity)
                             .insert(TradeInteraction::new(trade_component));
                     }
                 };
@@ -201,7 +206,7 @@ fn setup(
             Name::new("the happier seller"),
             AgentLogs::new(),
             SellerRole { location: v },
-            Idle,
+            AgentState::default(),
         ));
 
         shared_knowledge.add_fact(ecs::knowledge::KnowledgeFact::SellerInfo {
@@ -232,7 +237,7 @@ fn setup(
             Name::new("the happier seller"),
             AgentLogs::new(),
             SellerRole { location: v },
-            Idle,
+            AgentState::default(),
         ));
 
         shared_knowledge.add_fact(ecs::knowledge::KnowledgeFact::SellerInfo {
@@ -242,7 +247,7 @@ fn setup(
         });
     }
 
-    for i in 0..150 {
+    for i in 0..100 {
         let entity_id = commands.spawn_empty().id();
 
         commands.entity(entity_id).insert((
@@ -261,7 +266,7 @@ fn setup(
             AgentLogs::new(),
             Name::new(format!("agent_{}", i)),
             NoneRole,
-            Idle,
+            AgentState::default(),
         ));
     }
 }
