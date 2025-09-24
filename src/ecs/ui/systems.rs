@@ -19,9 +19,11 @@ use crate::{
         agent::*,
         components::{ConsumeTask, DurationActionMarker, Idle},
         interaction::{KnowledgeSharing, KnowledgeSharingInteraction, ObtainKnowledgeTask},
-        knowledge,
         logs::AgentLogs,
-        trade::components::{BuyTask, Buying, TradeNegotiation},
+        trade::{
+            actions::buy::components::Buying, components::TradeNegotiation,
+            tasks::buy::components::BuyTask,
+        },
     },
     AgentInteractionQueue, Walking,
 };
@@ -105,7 +107,11 @@ pub fn agent_ui_panel_system(
         Option<&ObtainKnowledgeTask>,
     )>,
     interaction_query: Query<(Option<&Interacting>, Option<&WaitingInteraction>)>,
-    interaction_data_query: Query<(Option<&TradeNegotiation>, Option<&KnowledgeSharingInteraction>, Option<&KnowledgeSharing>)>,
+    interaction_data_query: Query<(
+        Option<&TradeNegotiation>,
+        Option<&KnowledgeSharingInteraction>,
+        Option<&KnowledgeSharing>,
+    )>,
 ) {
     // Check if an agent is selected. If not, we don't draw anything.
     let Some(selected_entity) = selected_agent.entity else {
@@ -182,7 +188,9 @@ pub fn agent_ui_panel_system(
             ui.separator();
 
             ui.label("CURRENT Interaction Data:");
-            if let Ok((trade, knowledge_interaction, knowledge)) = interaction_data_query.get(selected_entity) {
+            if let Ok((trade, knowledge_interaction, knowledge)) =
+                interaction_data_query.get(selected_entity)
+            {
                 if let Some(_) = trade {
                     ui.label("TradeNegotiation");
                 }

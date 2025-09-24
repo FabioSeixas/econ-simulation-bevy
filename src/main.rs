@@ -1,16 +1,14 @@
 mod core;
 mod ecs;
 
-use std::collections::VecDeque;
-
 use bevy::log::*;
 use bevy::prelude::*;
 
 use crate::core::item::ItemEnum;
 use crate::ecs::agent::*;
 use crate::ecs::components::*;
+use crate::ecs::consume::tasks::components::ConsumeTask;
 use crate::ecs::interaction::*;
-use crate::ecs::knowledge::AgentKnowledge;
 use crate::ecs::knowledge::KnowledgePlugin;
 use crate::ecs::knowledge::SharedKnowledge;
 use crate::ecs::logs::*;
@@ -20,6 +18,7 @@ use crate::ecs::roles::{none::*, seller::*};
 use crate::ecs::talk::ask::plugin::AskPlugin;
 use crate::ecs::trade::components::*;
 use crate::ecs::trade::plugin::TradePlugin;
+use crate::ecs::trade::tasks::buy::components::BuyTask;
 use crate::ecs::ui::plugin::UiPlugin;
 use crate::ecs::utils::get_random_vec3;
 
@@ -42,12 +41,8 @@ fn main() {
                 check_idle_agents_needs,
                 handle_idle_sellers,
                 handle_idle_none_role,
-                handle_consume_task,
-                handle_buy_task,
-                handle_consuming_action,
                 handle_selling_action,
                 handle_walking_action,
-                handle_buy_action,
                 obtain_knowledge_system,
                 start_interaction_system,
             )
@@ -246,56 +241,6 @@ fn check_agent_interaction_queue_system(
 }
 
 #[derive(Component)]
-pub struct AgentInteractionQueue {
-    next_id: usize,
-    queue: VecDeque<AgentInteractionEvent>,
-}
-
-impl AgentInteractionQueue {
-    pub fn new() -> Self {
-        Self {
-            next_id: 0,
-            queue: VecDeque::new(),
-        }
-    }
-
-    pub fn add(&mut self, kind: AgentInteractionKind) -> usize {
-        self.queue.push_back(AgentInteractionEvent {
-            id: self.next_id,
-            kind,
-        });
-        self.next_id += 1;
-        self.next_id
-    }
-
-    pub fn rm_id(&mut self, rm_id: usize) {
-        self.queue.retain(|event| event.id != rm_id);
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.queue.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.queue.len()
-    }
-
-    pub fn get_first(&mut self) -> Option<&AgentInteractionEvent> {
-        match self.queue.front() {
-            None => None,
-            Some(v) => Some(v),
-        }
-    }
-
-    pub fn pop_first(&mut self) -> Option<AgentInteractionEvent> {
-        match self.queue.pop_front() {
-            None => None,
-            Some(v) => Some(v),
-        }
-    }
-}
-
-#[derive(Component)]
 struct AnimationConfig {
     first_up_index: usize,
     last_up_index: usize,
@@ -463,221 +408,6 @@ fn check_idle_agents_needs(
                     .remove::<Idle>();
             }
         }
-    }
-}
-
-fn handle_buy_task(
-    mut query: Query<
-        (Entity, &Transform, &BuyTask, &AgentKnowledge),
-        (
-            With<BuyTask>,
-            Without<Idle>,
-            Without<Interacting>,
-            Without<WaitingInteraction>,
-            Without<Buying>,
-            Without<Walking>,
-        ),
-    >,
-    mut query_seller: Query<&SellerRole, With<SellerRole>>,
-    mut commands: Commands,
-    mut add_log_writer: EventWriter<AddLogEntry>,
-) {
-    for (buyer, buyer_transform, buy_task, buyer_knowledge) in &mut query {
-        let mut some_seller_found = false;
-
-        let known_sellers = buyer_knowledge.get_sellers_of(&buy_task.item);
-
-        if known_sellers.len() < 1 {
-            add_log_writer.send(AddLogEntry::new(
-                buyer,
-                "Zero Known Sellers. Buy Task failed. Start ObtainKnowledgeTask",
-            ));
-            commands
-                .entity(buyer)
-                .insert(ObtainKnowledgeTask::new(KnowledgeSharing {
-                    seller_of: buy_task.item,
-                }))
-                .remove::<BuyTask>();
-
-            continue;
-        }
-
-        for (seller, _) in known_sellers {
-            if buy_task.tried(&seller) {
-                continue;
-            }
-
-            some_seller_found = true;
-
-            if let Ok(seller_role) = query_seller.get_mut(seller.clone()) {
-                if buyer_transform.translation.distance(seller_role.location) > 50. {
-                    add_log_writer.send(AddLogEntry::new(
-                        buyer,
-                        "Starting Walking to the seller location",
-                    ));
-                    let mut walking = Walking::new(seller_role.location);
-                    walking.set_idle_at_completion(false);
-                    commands.entity(buyer).insert(walking);
-                } else {
-                    add_log_writer.send(AddLogEntry::new(buyer, "Start Buying"));
-                    commands
-                        .entity(buyer)
-                        .insert(Buying::from_buy_task(&buy_task, seller.clone()));
-                }
-                break;
-            }
-        }
-
-        if !some_seller_found {
-            add_log_writer.send(AddLogEntry::new(
-                buyer,
-                "No seller found. BuyTask failed. Walking around",
-            ));
-            commands
-                .entity(buyer)
-                .insert(Walking::new(get_random_vec3()))
-                .remove::<BuyTask>();
-        }
-    }
-}
-
-fn handle_buy_action(
-    mut query: Query<
-        (
-            Entity,
-            &mut Buying,
-            &mut BuyTask,
-            Option<&mut WaitingInteraction>,
-        ),
-        (With<Buying>, Without<Idle>, Without<Interacting>),
-    >,
-    mut query_seller: Query<&mut AgentInteractionQueue, With<Selling>>,
-    mut add_log_writer: EventWriter<AddLogEntry>,
-    mut commands: Commands,
-    time: Res<Time>,
-) {
-    for (buyer, mut buying, mut buy_task, waiting_interaction) in &mut query {
-        if let Some(mut waiting) = waiting_interaction {
-            if waiting.get_resting_duration() > 0. {
-                waiting.progress(time.delta_secs());
-            } else {
-                if let Ok(mut seller_interaction_queue) = query_seller.get_mut(buying.seller) {
-                    add_log_writer.send(AddLogEntry::new(
-                        buyer,
-                        "WaitingInteraction timed out, ending Buying",
-                    ));
-                    if buying.interaction_id.is_none() {
-                        panic!("handle_buy_action, buying.interaction_id must be Some")
-                    }
-                    seller_interaction_queue.rm_id(buying.interaction_id.unwrap());
-                    buy_task.add_tried(buying.seller);
-                    commands
-                        .entity(buyer)
-                        .remove::<(WaitingInteraction, Buying)>();
-                }
-            }
-        } else if let Ok(mut seller_agent_interaction_queue) = query_seller.get_mut(buying.seller) {
-            add_log_writer.send(AddLogEntry::new(
-                buyer,
-                "Seller found, adding TradeNegotiation to the seller queue",
-            ));
-            let buyer_trade_marker = TradeNegotiation {
-                role: TradeRole::Buyer,
-                quantity: buying.qty,
-                item: buying.item,
-                price: None,
-                partner: buying.seller.clone(),
-            };
-            commands
-                .entity(buyer)
-                .insert((buyer_trade_marker, WaitingInteraction::new()));
-
-            let seller_trade_marker = TradeNegotiation {
-                role: TradeRole::Seller,
-                quantity: buying.qty,
-                item: buying.item,
-                price: None,
-                partner: buyer,
-            };
-
-            let id = seller_agent_interaction_queue
-                .add(AgentInteractionKind::Trade(seller_trade_marker));
-
-            buying.interaction_id = Some(id);
-        } else {
-            add_log_writer.send(AddLogEntry::new(buyer, "Seller not found, removing Buying"));
-            buy_task.add_tried(buying.seller);
-            commands.entity(buyer).remove::<Buying>();
-        }
-    }
-}
-
-fn handle_consume_task(
-    mut query: Query<
-        (Entity, &Transform, &ConsumeTask),
-        (
-            With<ConsumeTask>,
-            Without<Walking>,
-            Without<Consuming>,
-            Without<Idle>,
-            Without<Interacting>,
-        ),
-    >,
-    mut commands: Commands,
-    mut add_log_writer: EventWriter<AddLogEntry>,
-) {
-    for (entity, transform, consume_task) in &mut query {
-        if consume_task.location.distance(transform.translation) > 50. {
-            add_log_writer.send(AddLogEntry::new(entity, "Start Walking to consume"));
-            let mut walking = Walking::new(consume_task.location);
-            walking.set_idle_at_completion(false);
-            commands.entity(entity).insert(walking).remove::<Idle>();
-        } else {
-            add_log_writer.send(AddLogEntry::new(entity, "Start Consuming"));
-            commands
-                .entity(entity)
-                .insert(Consuming::new(consume_task.item, consume_task.qty))
-                .remove::<Idle>();
-        }
-    }
-}
-
-fn handle_consuming_action(
-    mut query: Query<
-        (Entity, &mut Agent, &mut Consuming),
-        (
-            With<Consuming>,
-            With<ConsumeTask>,
-            Without<Interacting>,
-            Without<Idle>,
-        ),
-    >,
-    time: Res<Time>,
-    mut commands: Commands,
-    mut add_log_writer: EventWriter<AddLogEntry>,
-) {
-    for (entity, mut agent, mut consuming) in &mut query {
-        if consuming.get_resting_duration() > 0. {
-            consuming.progress(time.delta_secs());
-            continue;
-        }
-
-        let item = consuming.item.clone();
-        if item.is_food() {
-            add_log_writer.send(AddLogEntry::new(entity, "Consume (eat) done"));
-            agent.satisfy_hungry();
-        }
-
-        if item.is_liquid() {
-            add_log_writer.send(AddLogEntry::new(entity, "Consume (drink) done"));
-            agent.satisfy_thirsty();
-        }
-        agent.inventory.remove(item, consuming.qty);
-
-        commands
-            .entity(entity)
-            .insert(Idle)
-            .remove::<(Consuming, ConsumeTask)>();
     }
 }
 
