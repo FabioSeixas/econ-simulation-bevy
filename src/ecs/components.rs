@@ -28,11 +28,35 @@ pub enum AgentState {
     Interacting(InteractingStep),
 }
 
+impl AgentState {
+    pub fn interaction_happening() -> Self {
+        AgentState::Interacting(InteractingStep::Happening)
+    }
+
+    pub fn is_idle(&self) -> bool {
+        *self == AgentState::Idle
+    }
+
+    pub fn is_acting(&self) -> bool {
+        *self == AgentState::Acting
+    }
+
+    pub fn is_actively_interacting(&self) -> bool {
+        match self {
+            Self::Interacting(v) => match v {
+                InteractingStep::Happening => true,
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+}
+
 #[derive(Component, Default, PartialEq, Eq)]
 pub enum InteractingStep {
     #[default]
     Waiting,
-    Happening
+    Happening,
 }
 
 #[derive(Component, Default, Debug)]

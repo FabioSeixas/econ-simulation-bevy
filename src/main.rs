@@ -18,7 +18,6 @@ use crate::ecs::roles::seller::SellerRole;
 use crate::ecs::roles::{none::*, seller::*};
 use crate::ecs::talk::interaction::components::KnowledgeSharingInteraction;
 use crate::ecs::talk::plugin::TalkPlugin;
-use crate::ecs::trade::components::*;
 use crate::ecs::trade::plugin::TradePlugin;
 use crate::ecs::trade::tasks::buy::components::BuyTask;
 use crate::ecs::ui::plugin::UiPlugin;
@@ -72,19 +71,12 @@ fn update_agents(mut query: Query<&mut Agent, With<Agent>>) {
 }
 
 fn check_agent_interaction_queue_system(
-    mut query: Query<
-        (Entity, &Name, &AgentState, &mut AgentInteractionQueue),
-        (
-            With<Agent>,
-            // Without<Interacting>,
-            // Without<WaitingInteraction>,
-        ),
-    >,
+    mut query: Query<(Entity, &Name, &AgentState, &mut AgentInteractionQueue), (With<Agent>,)>,
     mut commands: Commands,
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
     for (target_entity, name, target_agent_state, mut agent_interation_queue) in &mut query {
-        if matches!(*target_agent_state, AgentState::Interacting(_)) {
+        if target_agent_state.is_actively_interacting() {
             continue;
         }
 
@@ -101,18 +93,16 @@ fn check_agent_interaction_queue_system(
                             format!("Start Ask Interaction with target {}", name).as_str(),
                         ));
                         commands.entity(sharing.partner).insert((
-                            AgentState::Interacting(InteractingStep::Happening),
+                            AgentState::interaction_happening(),
                             KnowledgeSharingInteraction {
                                 seller_of: sharing.seller_of,
                                 partner: target_entity,
                             },
                         ));
-                        // .remove::<WaitingInteraction>();
 
                         commands
                             .entity(target_entity)
-                            .insert((sharing, AgentState::Interacting(InteractingStep::Happening)));
-                        //.insert((Interacting, sharing));
+                            .insert((sharing, AgentState::interaction_happening()));
                     }
                     AgentInteractionKind::Trade(trade_component) => {
                         add_log_writer.send(AddLogEntry::new(
@@ -126,11 +116,11 @@ fn check_agent_interaction_queue_system(
                         ));
                         commands
                             .entity(trade_component.partner)
-                            .insert(Interacting)
-                            .remove::<WaitingInteraction>();
+                            .insert(AgentState::interaction_happening());
+
                         commands
                             .entity(target_entity)
-                            .insert(TradeInteraction::new(trade_component));
+                            .insert((trade_component, AgentState::interaction_happening()));
                     }
                 };
             }
@@ -272,38 +262,42 @@ fn setup(
 }
 
 fn check_idle_agents_needs(
-    query: Query<(Entity, &Agent), (With<Idle>, Without<Interacting>)>,
+    query: Query<(Entity, &AgentState, &Agent), With<Agent>>,
     mut add_log_writer: EventWriter<AddLogEntry>,
     mut commands: Commands,
 ) {
-    for (entity, agent) in &query {
+    for (entity, agent_state, agent) in &query {
+        if !agent_state.is_idle() {
+            continue;
+        }
+
         if agent.is_hungry() {
             if agent.have_food() {
                 add_log_writer.send(AddLogEntry::new(entity, "Start ConsumeTask (eat)"));
-                commands
-                    .entity(entity)
-                    .insert(ConsumeTask::new(core::item::ItemEnum::MEAT, 1))
-                    .remove::<Idle>();
+                commands.entity(entity).insert((
+                    ConsumeTask::new(core::item::ItemEnum::MEAT, 1),
+                    AgentState::Tasking,
+                ));
             } else {
                 add_log_writer.send(AddLogEntry::new(entity, "Start BuyTask"));
-                commands
-                    .entity(entity)
-                    .insert(BuyTask::new(core::item::ItemEnum::MEAT, 1))
-                    .remove::<Idle>();
+                commands.entity(entity).insert((
+                    BuyTask::new(core::item::ItemEnum::MEAT, 1),
+                    AgentState::Tasking,
+                ));
             }
         } else if agent.is_thirsty() {
             if agent.have_drink() {
                 add_log_writer.send(AddLogEntry::new(entity, "Start ConsumeTask (drink)"));
-                commands
-                    .entity(entity)
-                    .insert(ConsumeTask::new(core::item::ItemEnum::WATER, 1))
-                    .remove::<Idle>();
+                commands.entity(entity).insert((
+                    ConsumeTask::new(core::item::ItemEnum::WATER, 1),
+                    AgentState::Tasking,
+                ));
             } else {
                 add_log_writer.send(AddLogEntry::new(entity, "Start BuyTask (water)"));
-                commands
-                    .entity(entity)
-                    .insert(BuyTask::new(core::item::ItemEnum::WATER, 1))
-                    .remove::<Idle>();
+                commands.entity(entity).insert((
+                    BuyTask::new(core::item::ItemEnum::WATER, 1),
+                    AgentState::Tasking,
+                ));
             }
         }
     }
@@ -317,23 +311,34 @@ fn handle_walking_action(
             &AnimationConfig,
             &mut Sprite,
             &Walking,
+            &AgentState,
         ),
-        (With<Walking>, Without<Interacting>, Without<Idle>),
+        With<Walking>,
     >,
     time: Res<Time>,
     mut commands: Commands,
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
-    for (entity, mut transform, config, mut sprite, walking) in &mut query {
+    for (entity, mut transform, config, mut sprite, walking, agent_state) in &mut query {
+        if !agent_state.is_acting() {
+            continue;
+        }
+
         if walking.destination.distance(transform.translation) > 50. {
             let mut direction = (walking.destination - transform.translation).normalize();
             movement(&mut direction, &mut transform, &config, &mut sprite, &time);
         } else {
             add_log_writer.send(AddLogEntry::new(entity, "Walking finished with success"));
             if walking.should_set_idle_at_completion() {
-                commands.entity(entity).insert(Idle).remove::<Walking>();
+                commands
+                    .entity(entity)
+                    .insert(AgentState::Idle)
+                    .remove::<Walking>();
             } else {
-                commands.entity(entity).remove::<Walking>();
+                commands
+                    .entity(entity)
+                    .insert(AgentState::Tasking)
+                    .remove::<Walking>();
             }
         }
     }
