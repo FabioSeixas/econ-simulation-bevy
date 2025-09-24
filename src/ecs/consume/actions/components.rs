@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{core::item::ItemEnum, ecs::components::DurationActionMarker};
+use crate::{core::item::ItemEnum, ecs::components::DurationAction};
 
 #[derive(Component)]
 pub struct Consuming {
@@ -19,7 +19,7 @@ impl Consuming {
     }
 }
 
-impl DurationActionMarker for Consuming {
+impl DurationAction for Consuming {
     fn get_resting_duration(&self) -> f32 {
         self.resting_duration
     }

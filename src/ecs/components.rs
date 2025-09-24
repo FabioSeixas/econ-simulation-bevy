@@ -5,7 +5,7 @@ pub trait ActionMarker {
     fn set_idle_at_completion(&mut self, value: bool);
 }
 
-pub trait DurationActionMarker {
+pub trait DurationAction {
     fn get_resting_duration(&self) -> f32;
     fn progress(&mut self, time: f32);
 }
@@ -35,7 +35,7 @@ impl WaitingInteraction {
     }
 }
 
-impl DurationActionMarker for WaitingInteraction {
+impl DurationAction for WaitingInteraction {
     fn get_resting_duration(&self) -> f32 {
         self.resting_duration
     }

@@ -12,9 +12,8 @@ use bevy::{
 };
 
 use crate::ecs::{
-    components::{DurationActionMarker, Idle, Interacting, Walking},
-    logs::AddLogEntry,
-    trade::components::Selling,
+    components::{DurationAction, Idle, Interacting, Walking},
+    logs::AddLogEntry, trade::actions::sell::components::Selling,
 };
 
 #[derive(Component, Default)]

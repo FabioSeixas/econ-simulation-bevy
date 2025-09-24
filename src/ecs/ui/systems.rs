@@ -15,12 +15,19 @@ use bevy::{
 };
 
 use crate::ecs::{
-    components::{Interacting, WaitingInteraction}, consume::{actions::components::Consuming, tasks::components::ConsumeTask}, talk::{action::components::TalkAction, interaction::components::KnowledgeSharingInteraction, task::components::TalkTask}, trade::components::Selling, ui::resources::SelectedAgent
+    components::{Interacting, WaitingInteraction},
+    consume::{actions::components::Consuming, tasks::components::ConsumeTask},
+    talk::{
+        action::components::TalkAction, interaction::components::KnowledgeSharingInteraction,
+        task::components::TalkTask,
+    },
+    trade::actions::sell::components::Selling,
+    ui::resources::SelectedAgent,
 };
 use crate::{
     ecs::{
         agent::*,
-        components::{DurationActionMarker, Idle},
+        components::{DurationAction, Idle},
         logs::AgentLogs,
         trade::{
             actions::buy::components::Buying, components::TradeNegotiation,
@@ -95,11 +102,7 @@ pub fn agent_ui_panel_system(
         Option<&Buying>,
         Option<&Walking>,
     )>,
-    task_query: Query<(
-        Option<&BuyTask>,
-        Option<&ConsumeTask>,
-        Option<&TalkTask>,
-    )>,
+    task_query: Query<(Option<&BuyTask>, Option<&ConsumeTask>, Option<&TalkTask>)>,
     interaction_query: Query<(Option<&Interacting>, Option<&WaitingInteraction>)>,
     interaction_data_query: Query<(
         Option<&TradeNegotiation>,

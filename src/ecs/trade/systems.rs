@@ -7,7 +7,10 @@ use crate::{
         components::Interacting,
         logs::AddLogEntry,
         trade::{
-            actions::buy::components::Buying, components::{Selling, TradeInteraction, TradeNegotiation, TradeRole}, events::{OfferAgreed, OfferMade, TradeFinalized}, tasks::buy::components::BuyTask
+            actions::{buy::components::Buying, sell::components::Selling},
+            components::{TradeInteraction, TradeNegotiation, TradeRole},
+            events::{OfferAgreed, OfferMade, TradeFinalized},
+            tasks::buy::components::BuyTask,
         },
     },
     Idle,

@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::ecs::components::*;
 use crate::ecs::interaction::*;
 use crate::ecs::logs::*;
+use crate::ecs::trade::actions::sell::components::Selling;
 use crate::ecs::trade::components::*;
 use crate::ecs::trade::tasks::buy::components::BuyTask;
 use crate::ecs::trade::actions::buy::components::Buying;
