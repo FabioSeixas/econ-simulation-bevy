@@ -1,10 +1,11 @@
 use bevy::prelude::*;
 
 use crate::ecs::components::*;
-use crate::ecs::interaction::*;
 use crate::ecs::knowledge::AgentKnowledge;
 use crate::ecs::logs::*;
 use crate::ecs::roles::seller::SellerRole;
+use crate::ecs::talk::action::components::TalkAction;
+use crate::ecs::talk::task::components::TalkTask;
 use crate::ecs::trade::actions::buy::components::Buying;
 use crate::ecs::trade::tasks::buy::components::BuyTask;
 use crate::ecs::utils::get_random_vec3;
@@ -37,7 +38,7 @@ pub fn handle_buy_task(
             ));
             commands
                 .entity(buyer)
-                .insert(ObtainKnowledgeTask::new(KnowledgeSharing {
+                .insert(TalkTask::new(TalkAction {
                     seller_of: buy_task.item,
                 }))
                 .remove::<BuyTask>();

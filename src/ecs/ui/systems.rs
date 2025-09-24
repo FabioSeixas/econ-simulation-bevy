@@ -14,11 +14,13 @@ use bevy::{
     window::{PrimaryWindow, Window},
 };
 
+use crate::ecs::{
+    components::{Interacting, WaitingInteraction}, consume::{actions::components::Consuming, tasks::components::ConsumeTask}, talk::{action::components::TalkAction, interaction::components::KnowledgeSharingInteraction, task::components::TalkTask}, trade::components::Selling, ui::resources::SelectedAgent
+};
 use crate::{
     ecs::{
         agent::*,
-        components::{ConsumeTask, DurationActionMarker, Idle},
-        interaction::{KnowledgeSharing, KnowledgeSharingInteraction, ObtainKnowledgeTask},
+        components::{DurationActionMarker, Idle},
         logs::AgentLogs,
         trade::{
             actions::buy::components::Buying, components::TradeNegotiation,
@@ -26,14 +28,6 @@ use crate::{
         },
     },
     AgentInteractionQueue, Walking,
-};
-use crate::{
-    ecs::{
-        components::{Interacting, WaitingInteraction},
-        trade::components::Selling,
-        ui::resources::SelectedAgent,
-    },
-    Consuming,
 };
 
 pub fn agent_selection_system(
@@ -104,13 +98,13 @@ pub fn agent_ui_panel_system(
     task_query: Query<(
         Option<&BuyTask>,
         Option<&ConsumeTask>,
-        Option<&ObtainKnowledgeTask>,
+        Option<&TalkTask>,
     )>,
     interaction_query: Query<(Option<&Interacting>, Option<&WaitingInteraction>)>,
     interaction_data_query: Query<(
         Option<&TradeNegotiation>,
         Option<&KnowledgeSharingInteraction>,
-        Option<&KnowledgeSharing>,
+        Option<&TalkAction>,
     )>,
 ) {
     // Check if an agent is selected. If not, we don't draw anything.

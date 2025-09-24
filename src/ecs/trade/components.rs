@@ -2,12 +2,8 @@ use bevy::prelude::*;
 
 use crate::{
     core::item::ItemEnum,
-    ecs::{
-        components::{DurationActionMarker, Interacting},
-        trade::tasks::buy::components::BuyTask,
-    },
+    ecs::components::{DurationActionMarker, Interacting},
 };
-
 
 #[derive(Component, Default)]
 pub struct Selling {

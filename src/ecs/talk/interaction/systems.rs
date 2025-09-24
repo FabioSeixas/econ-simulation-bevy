@@ -2,10 +2,14 @@ use bevy::prelude::*;
 
 use crate::ecs::{
     components::{Idle, Interacting, WaitingInteraction},
-    interaction::{KnowledgeSharingInteraction, ObtainKnowledgeTask},
     knowledge::AgentKnowledge,
     logs::AddLogEntry,
-    talk::ask::events::{ShareKnowledgeEvent, ShareKnowledgeFinalizedEvent},
+    talk::{
+        interaction::{
+            components::KnowledgeSharingInteraction,
+            events::{SendKnowledgeEvent, ShareKnowledgeFinalizedEvent},
+        }, task::components::TalkTask,
+    },
 };
 
 pub fn handle_knowlegde_share_request_system(
@@ -14,7 +18,7 @@ pub fn handle_knowlegde_share_request_system(
             Entity,
             &KnowledgeSharingInteraction,
             &AgentKnowledge,
-            Option<&ObtainKnowledgeTask>,
+            Option<&TalkTask>,
         ),
         (
             Added<KnowledgeSharingInteraction>,
@@ -26,7 +30,7 @@ pub fn handle_knowlegde_share_request_system(
         (Entity, &AgentKnowledge),
         (With<KnowledgeSharingInteraction>, With<Interacting>),
     >,
-    mut share_knowledge_writer: EventWriter<ShareKnowledgeEvent>,
+    mut share_knowledge_writer: EventWriter<SendKnowledgeEvent>,
     mut share_knowledge_finalized_writer: EventWriter<ShareKnowledgeFinalizedEvent>,
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
@@ -54,7 +58,7 @@ pub fn handle_knowlegde_share_request_system(
 
             for (seller, knowledge_id) in target_known_sellers {
                 if !source_known_sellers.contains(&seller) {
-                    share_knowledge_writer.send(ShareKnowledgeEvent {
+                    share_knowledge_writer.send(SendKnowledgeEvent {
                         target: source_entity,
                         knowledge_id,
                     });
@@ -84,7 +88,7 @@ pub fn handle_knowlegde_share_finalized_system(
         (Entity, &KnowledgeSharingInteraction, &mut AgentKnowledge),
         (With<KnowledgeSharingInteraction>, With<Interacting>),
     >,
-    mut share_knowledge_reader: EventReader<ShareKnowledgeEvent>,
+    mut share_knowledge_reader: EventReader<SendKnowledgeEvent>,
     mut share_knowledge_finalized_writer: EventWriter<ShareKnowledgeFinalizedEvent>,
 ) {
     for event in share_knowledge_reader.read() {
@@ -110,7 +114,7 @@ pub fn handle_knowlegde_share_finalized_system(
 pub fn share_knowledge_finalized_system(
     mut share_knowledge_finalized_reader: EventReader<ShareKnowledgeFinalizedEvent>,
     mut agent_query: Query<
-        (Entity, Option<&mut ObtainKnowledgeTask>),
+        (Entity, Option<&mut TalkTask>),
         (With<KnowledgeSharingInteraction>, With<Interacting>),
     >,
     mut commands: Commands,
@@ -124,7 +128,7 @@ pub fn share_knowledge_finalized_system(
                     commands.entity(event.target).insert(Idle).remove::<(
                         Interacting,
                         KnowledgeSharingInteraction,
-                        ObtainKnowledgeTask,
+                        TalkTask
                     )>();
                 } else {
                     println!("task: {:?}", task);
@@ -144,7 +148,7 @@ pub fn share_knowledge_finalized_system(
                 commands.entity(event.target).insert(Idle).remove::<(
                     Interacting,
                     KnowledgeSharingInteraction,
-                    ObtainKnowledgeTask,
+                    TalkTask,
                 )>();
             }
         }
