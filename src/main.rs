@@ -16,6 +16,8 @@ use crate::ecs::logs::*;
 use crate::ecs::roles::none::NoneRole;
 use crate::ecs::roles::seller::SellerRole;
 use crate::ecs::roles::{none::*, seller::*};
+use crate::ecs::state::components::InteractionState;
+use crate::ecs::state::components::TaskState;
 use crate::ecs::talk::interaction::components::KnowledgeSharingInteraction;
 use crate::ecs::talk::plugin::TalkPlugin;
 use crate::ecs::trade::components::*;
@@ -55,7 +57,7 @@ fn main() {
 }
 
 pub fn add_logs_system(
-    mut agent_query: Query<&mut AgentLogs, With<AgentLogs>>,
+    mut agent_query: Query<&mut AgentLogs>,
     mut add_logs_reader: EventReader<AddLogEntry>,
 ) {
     for event in add_logs_reader.read() {
@@ -65,7 +67,7 @@ pub fn add_logs_system(
     }
 }
 
-fn update_agents(mut query: Query<&mut Agent, With<Agent>>) {
+fn update_agents(mut query: Query<&mut Agent>) {
     for mut agent in &mut query {
         agent.frame_update();
     }
@@ -75,7 +77,6 @@ fn check_agent_interaction_queue_system(
     mut query: Query<
         (Entity, &Name, &mut AgentInteractionQueue),
         (
-            With<Agent>,
             Without<Interacting>,
             // Without<WaitingInteraction>,
         ),
@@ -96,18 +97,17 @@ fn check_agent_interaction_queue_system(
                             sharing.partner,
                             format!("Start Ask Interaction with target {}", name).as_str(),
                         ));
-                        commands
-                            .entity(sharing.partner)
-                            .insert((
-                                Interacting,
-                                KnowledgeSharingInteraction {
-                                    seller_of: sharing.seller_of,
-                                    partner: entity,
-                                },
-                            ))
-                            .remove::<WaitingInteraction>();
+                        commands.entity(sharing.partner).insert((
+                            InteractionState::Talk,
+                            KnowledgeSharingInteraction {
+                                seller_of: sharing.seller_of,
+                                partner: entity,
+                            },
+                        ));
 
-                        commands.entity(entity).insert((Interacting, sharing));
+                        commands
+                            .entity(entity)
+                            .insert((InteractionState::Talk, sharing));
                     }
                     AgentInteractionKind::Trade(trade_component) => {
                         add_log_writer.send(AddLogEntry::new(
@@ -121,11 +121,10 @@ fn check_agent_interaction_queue_system(
                         ));
                         commands
                             .entity(trade_component.partner)
-                            .insert(Interacting)
-                            .remove::<WaitingInteraction>();
+                            .insert(InteractionState::Trade);
                         commands
                             .entity(entity)
-                            .insert(TradeInteraction::new(trade_component));
+                            .insert((InteractionState::Trade, trade_component));
                     }
                 };
             }
@@ -201,7 +200,9 @@ fn setup(
             Name::new("the happier seller"),
             AgentLogs::new(),
             SellerRole { location: v },
-            Idle,
+            TaskState::default(),
+            AgentState::default(),
+            InteractionState::default(),
         ));
 
         shared_knowledge.add_fact(ecs::knowledge::KnowledgeFact::SellerInfo {
@@ -232,7 +233,9 @@ fn setup(
             Name::new("the happier seller"),
             AgentLogs::new(),
             SellerRole { location: v },
-            Idle,
+            TaskState::default(),
+            AgentState::default(),
+            InteractionState::default(),
         ));
 
         shared_knowledge.add_fact(ecs::knowledge::KnowledgeFact::SellerInfo {
@@ -261,7 +264,9 @@ fn setup(
             AgentLogs::new(),
             Name::new(format!("agent_{}", i)),
             NoneRole,
-            Idle,
+            TaskState::default(),
+            AgentState::default(),
+            InteractionState::default(),
         ));
     }
 }

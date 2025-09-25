@@ -10,40 +10,6 @@ pub trait DurationAction {
     fn progress(&mut self, time: f32);
 }
 
-#[derive(Component, Default)]
-pub struct Idle;
-
-#[derive(Component, Default)]
-pub struct Task;
-
-#[derive(Component, Default)]
-pub struct Action;
-
-#[derive(Component, Default, Debug)]
-pub struct Interacting;
-
-#[derive(Component, Default, Debug)]
-pub struct WaitingInteraction {
-    resting_duration: f32,
-}
-
-impl WaitingInteraction {
-    pub fn new() -> Self {
-        Self {
-            resting_duration: 5.,
-        }
-    }
-}
-
-impl DurationAction for WaitingInteraction {
-    fn get_resting_duration(&self) -> f32 {
-        self.resting_duration
-    }
-    fn progress(&mut self, time: f32) {
-        self.resting_duration -= time;
-    }
-}
-
 #[derive(Component, Debug)]
 pub struct Walking {
     pub destination: Vec3,
