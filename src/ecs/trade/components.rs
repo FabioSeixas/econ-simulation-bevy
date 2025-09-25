@@ -1,9 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{
-    core::item::ItemEnum,
-    ecs::components::{DurationAction, Interacting},
-};
+use crate::{core::item::ItemEnum, ecs::components::Interacting};
 
 #[derive(Component, Clone, Debug)]
 pub struct TradeNegotiation {

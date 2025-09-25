@@ -3,19 +3,10 @@ use bevy::prelude::*;
 use crate::ecs::agent::Agent;
 use crate::ecs::components::*;
 use crate::ecs::consume::actions::components::Consuming;
-use crate::ecs::consume::tasks::components::ConsumeTask;
 use crate::ecs::logs::*;
 
 pub fn handle_consuming_action(
-    mut query: Query<
-        (Entity, &mut Agent, &mut Consuming),
-        (
-            With<Consuming>,
-            With<ConsumeTask>,
-            Without<Interacting>,
-            Without<Idle>,
-        ),
-    >,
+    mut query: Query<(Entity, &mut Agent, &mut Consuming), Without<Interacting>>,
     time: Res<Time>,
     mut commands: Commands,
     mut add_log_writer: EventWriter<AddLogEntry>,
@@ -38,9 +29,6 @@ pub fn handle_consuming_action(
         }
         agent.inventory.remove(item, consuming.qty);
 
-        commands
-            .entity(entity)
-            .insert(Idle)
-            .remove::<(Consuming, ConsumeTask)>();
+        commands.entity(entity).remove::<Consuming>();
     }
 }

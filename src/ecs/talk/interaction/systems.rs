@@ -8,7 +8,8 @@ use crate::ecs::{
         interaction::{
             components::KnowledgeSharingInteraction,
             events::{SendKnowledgeEvent, ShareKnowledgeFinalizedEvent},
-        }, task::components::TalkTask,
+        },
+        task::components::TalkTask,
     },
 };
 
@@ -90,8 +91,13 @@ pub fn handle_knowlegde_share_finalized_system(
     >,
     mut share_knowledge_reader: EventReader<SendKnowledgeEvent>,
     mut share_knowledge_finalized_writer: EventWriter<ShareKnowledgeFinalizedEvent>,
+    mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
     for event in share_knowledge_reader.read() {
+        add_log_writer.send(AddLogEntry::new(
+            event.target,
+            "arrive handle_knowlegde_share_finalized_system",
+        ));
         if let Ok((target_entity, knowledge_sharing, target_agent_knowledge)) =
             &mut target_query.get_mut(event.target)
         {
@@ -117,10 +123,14 @@ pub fn share_knowledge_finalized_system(
         (Entity, Option<&mut TalkTask>),
         (With<KnowledgeSharingInteraction>, With<Interacting>),
     >,
+    mut add_log_writer: EventWriter<AddLogEntry>,
     mut commands: Commands,
 ) {
     for event in share_knowledge_finalized_reader.read() {
-        println!("event: {:?}", event);
+        add_log_writer.send(AddLogEntry::new(
+            event.target,
+            "arrive share_knowledge_finalized_system",
+        ));
         if let Ok((_, task_opt)) = agent_query.get_mut(event.target) {
             if let Some(mut task) = task_opt {
                 // source
@@ -128,10 +138,9 @@ pub fn share_knowledge_finalized_system(
                     commands.entity(event.target).insert(Idle).remove::<(
                         Interacting,
                         KnowledgeSharingInteraction,
-                        TalkTask
+                        TalkTask,
                     )>();
                 } else {
-                    println!("task: {:?}", task);
                     if task.current_interaction.is_none() {
                         panic!("current_interaction must be Some")
                     }
@@ -145,11 +154,9 @@ pub fn share_knowledge_finalized_system(
                 }
             } else {
                 // target
-                commands.entity(event.target).insert(Idle).remove::<(
-                    Interacting,
-                    KnowledgeSharingInteraction,
-                    TalkTask,
-                )>();
+                commands
+                    .entity(event.target)
+                    .remove::<(Interacting, KnowledgeSharingInteraction)>();
             }
         }
     }

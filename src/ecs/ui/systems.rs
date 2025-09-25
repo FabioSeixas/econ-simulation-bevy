@@ -15,13 +15,15 @@ use bevy::{
 };
 
 use crate::ecs::{
+    buy::{actions::components::Buying, tasks::components::BuyTask},
     components::{Interacting, WaitingInteraction},
     consume::{actions::components::Consuming, tasks::components::ConsumeTask},
+    sell::actions::components::Selling,
     talk::{
         action::components::TalkAction, interaction::components::KnowledgeSharingInteraction,
         task::components::TalkTask,
     },
-    trade::actions::sell::components::Selling,
+    trade::components::TradeNegotiation,
     ui::resources::SelectedAgent,
 };
 use crate::{
@@ -29,10 +31,6 @@ use crate::{
         agent::*,
         components::{DurationAction, Idle},
         logs::AgentLogs,
-        trade::{
-            actions::buy::components::Buying, components::TradeNegotiation,
-            tasks::buy::components::BuyTask,
-        },
     },
     AgentInteractionQueue, Walking,
 };
@@ -135,12 +133,18 @@ pub fn agent_ui_panel_system(
                     ui.label("State: Idle 😴".to_string());
                 }
 
-                if let Some(_) = consuming {
-                    ui.label("State: Consuming 🍔".to_string());
+                if let Some(v) = consuming {
+                    ui.label(format!(
+                        "State: Consuming 🍔 - {:.1}",
+                        v.get_resting_duration()
+                    ));
                 }
 
-                if let Some(_) = selling {
-                    ui.label("State: Selling 💰".to_string());
+                if let Some(v) = selling {
+                    ui.label(format!(
+                        "State: Selling 💰 - {:.1}",
+                        v.get_resting_duration()
+                    ));
                 }
 
                 if let Some(_) = buying {

@@ -4,16 +4,15 @@ use crate::{
     core::item::ItemEnum,
     ecs::{
         agent::Agent,
-        components::Interacting,
+        buy::{actions::components::Buying, tasks::components::BuyTask},
+        components::{Idle, Interacting},
         logs::AddLogEntry,
+        sell::actions::components::Selling,
         trade::{
-            actions::{buy::components::Buying, sell::components::Selling},
             components::{TradeInteraction, TradeNegotiation, TradeRole},
             events::{OfferAgreed, OfferMade, TradeFinalized},
-            tasks::buy::components::BuyTask,
         },
     },
-    Idle,
 };
 
 pub fn seller_makes_offer_system(

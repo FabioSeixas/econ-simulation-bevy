@@ -2,7 +2,7 @@ use bevy::ecs::{
     component::Component,
     entity::Entity,
     event::EventWriter,
-    query::{With, Without},
+    query::With,
     system::{Commands, Query},
 };
 
@@ -16,15 +16,12 @@ use crate::ecs::{
 pub struct NoneRole;
 
 pub fn handle_idle_none_role(
-    query: Query<Entity, (With<NoneRole>, With<Idle>, Without<Walking>)>,
+    query: Query<Entity, (With<NoneRole>, With<Idle>)>,
     mut commands: Commands,
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
     for entity in &query {
-        add_log_writer.send(AddLogEntry::new(
-            entity,
-            "Role -> Start Walking"
-        ));
+        add_log_writer.send(AddLogEntry::new(entity, "Role -> Start Walking"));
         commands
             .entity(entity)
             .insert(Walking::new(get_random_vec3()))

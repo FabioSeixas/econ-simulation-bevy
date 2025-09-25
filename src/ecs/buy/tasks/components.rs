@@ -1,9 +1,8 @@
 use bevy::prelude::*;
 
-use crate::{core::item::ItemEnum, ecs::components::Task};
+use crate::core::item::ItemEnum;
 
 #[derive(Component, Debug)]
-#[require(Task)]
 pub struct BuyTask {
     pub item: ItemEnum,
     pub qty: usize,

@@ -1,13 +1,13 @@
 use bevy::prelude::*;
 
+use crate::ecs::buy::actions::components::Buying;
+use crate::ecs::buy::tasks::components::BuyTask;
 use crate::ecs::components::*;
 use crate::ecs::knowledge::AgentKnowledge;
 use crate::ecs::logs::*;
 use crate::ecs::roles::seller::SellerRole;
 use crate::ecs::talk::action::components::TalkAction;
 use crate::ecs::talk::task::components::TalkTask;
-use crate::ecs::trade::actions::buy::components::Buying;
-use crate::ecs::trade::tasks::buy::components::BuyTask;
 use crate::ecs::utils::get_random_vec3;
 
 pub fn handle_buy_task(

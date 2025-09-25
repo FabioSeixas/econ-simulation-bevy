@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod traits;
 pub mod interaction;
 pub mod trade;
 pub mod components;
@@ -9,3 +10,5 @@ pub mod logs;
 pub mod knowledge;
 pub mod talk;
 pub mod consume;
+pub mod sell;
+pub mod buy;

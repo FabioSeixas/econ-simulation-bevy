@@ -6,6 +6,8 @@ use bevy::prelude::*;
 
 use crate::core::item::ItemEnum;
 use crate::ecs::agent::*;
+use crate::ecs::buy::plugin::BuyPlugin;
+use crate::ecs::buy::tasks::components::BuyTask;
 use crate::ecs::components::*;
 use crate::ecs::consume::plugin::ConsumePlugin;
 use crate::ecs::consume::tasks::components::ConsumeTask;
@@ -14,13 +16,14 @@ use crate::ecs::knowledge::KnowledgePlugin;
 use crate::ecs::knowledge::SharedKnowledge;
 use crate::ecs::logs::*;
 use crate::ecs::roles::none::NoneRole;
+use crate::ecs::roles::plugin::RolesPlugin;
 use crate::ecs::roles::seller::SellerRole;
 use crate::ecs::roles::{none::*, seller::*};
+use crate::ecs::sell::plugin::SellPlugin;
 use crate::ecs::talk::interaction::components::KnowledgeSharingInteraction;
 use crate::ecs::talk::plugin::TalkPlugin;
 use crate::ecs::trade::components::*;
 use crate::ecs::trade::plugin::TradePlugin;
-use crate::ecs::trade::tasks::buy::components::BuyTask;
 use crate::ecs::ui::plugin::UiPlugin;
 use crate::ecs::utils::get_random_vec3;
 
@@ -35,17 +38,17 @@ fn main() {
         .add_plugins(TalkPlugin)
         .add_plugins(ConsumePlugin)
         .add_plugins(KnowledgePlugin)
+        .add_plugins(RolesPlugin)
+        .add_plugins(SellPlugin)
+        .add_plugins(BuyPlugin)
         .add_plugins(UiPlugin)
         .add_systems(Startup, setup)
         .add_systems(First, update_agents)
+        .add_systems(PreUpdate, check_idle_agents_needs)
         .add_systems(
             Update,
             (
                 check_agent_interaction_queue_system,
-                check_idle_agents_needs,
-                handle_idle_sellers,
-                handle_idle_none_role,
-                handle_selling_action,
                 handle_walking_action,
                 add_logs_system,
             )
@@ -55,7 +58,7 @@ fn main() {
 }
 
 pub fn add_logs_system(
-    mut agent_query: Query<&mut AgentLogs, With<AgentLogs>>,
+    mut agent_query: Query<&mut AgentLogs>,
     mut add_logs_reader: EventReader<AddLogEntry>,
 ) {
     for event in add_logs_reader.read() {
@@ -65,21 +68,14 @@ pub fn add_logs_system(
     }
 }
 
-fn update_agents(mut query: Query<&mut Agent, With<Agent>>) {
+fn update_agents(mut query: Query<&mut Agent>) {
     for mut agent in &mut query {
         agent.frame_update();
     }
 }
 
 fn check_agent_interaction_queue_system(
-    mut query: Query<
-        (Entity, &Name, &mut AgentInteractionQueue),
-        (
-            With<Agent>,
-            Without<Interacting>,
-            // Without<WaitingInteraction>,
-        ),
-    >,
+    mut query: Query<(Entity, &Name, &mut AgentInteractionQueue), Without<Interacting>>,
     mut commands: Commands,
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
@@ -242,7 +238,7 @@ fn setup(
         });
     }
 
-    for i in 0..150 {
+    for i in 0..50 {
         let entity_id = commands.spawn_empty().id();
 
         commands.entity(entity_id).insert((
@@ -267,11 +263,11 @@ fn setup(
 }
 
 fn check_idle_agents_needs(
-    query: Query<(Entity, &Agent), (With<Idle>, Without<Interacting>)>,
+    query: Query<(Entity, &Agent, &Idle)>,
     mut add_log_writer: EventWriter<AddLogEntry>,
     mut commands: Commands,
 ) {
-    for (entity, agent) in &query {
+    for (entity, agent, _) in &query {
         if agent.is_hungry() {
             if agent.have_food() {
                 add_log_writer.send(AddLogEntry::new(entity, "Start ConsumeTask (eat)"));
@@ -305,16 +301,13 @@ fn check_idle_agents_needs(
 }
 
 fn handle_walking_action(
-    mut query: Query<
-        (
-            Entity,
-            &mut Transform,
-            &AnimationConfig,
-            &mut Sprite,
-            &Walking,
-        ),
-        (With<Walking>, Without<Interacting>, Without<Idle>),
-    >,
+    mut query: Query<(
+        Entity,
+        &mut Transform,
+        &AnimationConfig,
+        &mut Sprite,
+        &Walking,
+    )>,
     time: Res<Time>,
     mut commands: Commands,
     mut add_log_writer: EventWriter<AddLogEntry>,

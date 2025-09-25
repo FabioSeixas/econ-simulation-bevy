@@ -13,12 +13,6 @@ pub trait DurationAction {
 #[derive(Component, Default)]
 pub struct Idle;
 
-#[derive(Component, Default)]
-pub struct Task;
-
-#[derive(Component, Default)]
-pub struct Action;
-
 #[derive(Component, Default, Debug)]
 pub struct Interacting;
 
@@ -55,6 +49,13 @@ impl Walking {
         Self {
             destination,
             should_set_idle: true,
+        }
+    }
+
+    pub fn new_with_not_idle(destination: Vec3) -> Self {
+        Self {
+            destination,
+            should_set_idle: false,
         }
     }
 }

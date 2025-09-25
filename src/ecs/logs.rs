@@ -19,6 +19,13 @@ impl AgentLogs {
     }
 
     pub fn add(&mut self, description: &String) {
+        if description.contains("Start Consuming") {
+            if let Some(v) = self.logs.last() {
+                if v.description.contains("Start Consuming") {
+                    println!("{:?}", self.logs);
+                }
+            }
+        }
         self.logs.push(LogEntry {
             description: description.clone(),
             time: SystemTime::now().duration_since(UNIX_EPOCH).ok().unwrap(),

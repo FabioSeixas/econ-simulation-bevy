@@ -1,12 +1,12 @@
 use bevy::prelude::*;
 
+use crate::ecs::buy::actions::components::Buying;
+use crate::ecs::buy::tasks::components::BuyTask;
 use crate::ecs::components::*;
 use crate::ecs::interaction::*;
 use crate::ecs::logs::*;
-use crate::ecs::trade::actions::sell::components::Selling;
+use crate::ecs::sell::actions::components::Selling;
 use crate::ecs::trade::components::*;
-use crate::ecs::trade::tasks::buy::components::BuyTask;
-use crate::ecs::trade::actions::buy::components::Buying;
 
 pub fn handle_buy_action(
     mut query: Query<
