@@ -11,6 +11,7 @@ pub enum PauseReason {
     Interacting,
     Walking,
     Consuming,
+    Buying,
 }
 
 pub type Paused = HashSet<PauseReason>;

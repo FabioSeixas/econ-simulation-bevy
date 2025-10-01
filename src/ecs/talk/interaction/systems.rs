@@ -1,162 +1,205 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use bevy::prelude::*;
 
 use crate::ecs::{
-    components::{Idle, Interacting, WaitingInteraction},
+    components::Interacting,
     knowledge::AgentKnowledge,
     logs::AddLogEntry,
     talk::{
+        events::*,
         interaction::{
             components::KnowledgeSharingInteraction,
-            events::{SendKnowledgeEvent, ShareKnowledgeFinalizedEvent},
+            events::{SendKnowledgeEvent, ShareKnowledgeFinalizedEvent, StartTalkEvent},
         },
-        task::components::TalkTask,
     },
 };
 
-pub fn handle_knowlegde_share_request_system(
-    target_query: Query<
-        (
-            Entity,
-            &KnowledgeSharingInteraction,
-            &AgentKnowledge,
-            Option<&TalkTask>,
-        ),
-        (
-            Added<KnowledgeSharingInteraction>,
-            With<Interacting>,
-            Without<WaitingInteraction>,
-        ),
-    >,
-    source_query: Query<
-        (Entity, &AgentKnowledge),
-        (With<KnowledgeSharingInteraction>, With<Interacting>),
-    >,
-    mut share_knowledge_writer: EventWriter<SendKnowledgeEvent>,
-    mut share_knowledge_finalized_writer: EventWriter<ShareKnowledgeFinalizedEvent>,
+pub fn handle_knowlegde_share_requested_system(
+    mut query: Query<(Entity, &mut KnowledgeSharingInteraction, &Transform)>,
+    transform_query: Query<&Transform, (With<KnowledgeSharingInteraction>, With<Interacting>)>,
+    mut start_talk_writer: EventWriter<StartTalkEvent>,
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
-    for (target_entity, knowledge_sharing, target_agent_knowledge, task_opt) in &target_query {
-        if task_opt.is_some() {
-            continue;
-        }
+    for (entity, mut knowledge_sharing, entity_transform) in &mut query {
+        let is_source = entity == knowledge_sharing.source;
+        if is_source && knowledge_sharing.is_waiting_target() {
+            add_log_writer.send(AddLogEntry::new(
+                entity,
+                format!(
+                    "KnowledgeSharingInteraction -> Start {}",
+                    knowledge_sharing.partner_name
+                )
+                .as_str(),
+            ));
+            // start the interaction for the source
+            knowledge_sharing.start();
+        } else if is_source {
+            // skip if source
+        } else if knowledge_sharing.is_waiting_target() {
+            // target: check if source is close
+            if let Ok(source_transform) = transform_query.get(knowledge_sharing.source) {
+                if source_transform
+                    .translation
+                    .distance(entity_transform.translation)
+                    <= 50.
+                {
+                    add_log_writer.send(AddLogEntry::new(
+                        entity,
+                        format!(
+                            "KnowledgeSharingInteraction -> Start with {}",
+                            knowledge_sharing.partner_name
+                        )
+                        .as_str(),
+                    ));
 
-        add_log_writer.send(AddLogEntry::new(
-            target_entity,
-            "arrive handle_knowlegde_share_request_system",
-        ));
-        if let Ok((source_entity, source_agent_knowledge)) =
-            source_query.get(knowledge_sharing.partner)
-        {
-            let target_known_sellers =
-                target_agent_knowledge.get_sellers_of(&knowledge_sharing.seller_of);
-            let source_known_sellers: Vec<Entity> = source_agent_knowledge
-                .get_sellers_of(&knowledge_sharing.seller_of)
-                .iter()
-                .map(|(seller, _)| seller.clone())
-                .collect();
-
-            let mut nothing_to_share = true;
-
-            for (seller, knowledge_id) in target_known_sellers {
-                if !source_known_sellers.contains(&seller) {
-                    share_knowledge_writer.send(SendKnowledgeEvent {
-                        target: source_entity,
-                        knowledge_id,
+                    // start the interaction for the target
+                    knowledge_sharing.start();
+                    start_talk_writer.send(StartTalkEvent {
+                        target: knowledge_sharing.target,
                     });
-
-                    nothing_to_share = false;
-
-                    break; // only ONE will be shared
                 }
-            }
-
-            if nothing_to_share {
-                share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
-                    target: source_entity,
-                    success: false,
-                });
-                share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
-                    target: target_entity,
-                    success: false,
-                });
             }
         }
     }
 }
 
-pub fn handle_knowlegde_share_finalized_system(
-    mut target_query: Query<
-        (Entity, &KnowledgeSharingInteraction, &mut AgentKnowledge),
+pub fn handle_knowlegde_share_started_system(
+    target_query: Query<(&KnowledgeSharingInteraction, &AgentKnowledge)>,
+    source_query: Query<
+        (Entity, &AgentKnowledge),
         (With<KnowledgeSharingInteraction>, With<Interacting>),
     >,
-    mut share_knowledge_reader: EventReader<SendKnowledgeEvent>,
+    mut send_knowledge_writer: EventWriter<SendKnowledgeEvent>,
+    mut share_knowledge_finalized_writer: EventWriter<ShareKnowledgeFinalizedEvent>,
+    mut start_talk_reader: EventReader<StartTalkEvent>,
+    mut add_log_writer: EventWriter<AddLogEntry>,
+) {
+    for event in start_talk_reader.read() {
+        if let Ok((knowledge_sharing, target_agent_knowledge)) = &target_query.get(event.target) {
+            add_log_writer.send(AddLogEntry::new(
+                event.target,
+                format!("Start talking with {}", knowledge_sharing.partner_name).as_str(),
+            ));
+
+            if let Ok((source_entity, source_agent_knowledge)) =
+                source_query.get(knowledge_sharing.source)
+            {
+                let target_known_sellers =
+                    target_agent_knowledge.get_sellers_of(&knowledge_sharing.seller_of);
+                let source_known_sellers: Vec<Entity> = source_agent_knowledge
+                    .get_sellers_of(&knowledge_sharing.seller_of)
+                    .iter()
+                    .map(|(seller, _)| seller.clone())
+                    .collect();
+
+                let mut nothing_to_share = true;
+
+                for (seller, knowledge_id) in target_known_sellers {
+                    if !source_known_sellers.contains(&seller) {
+                        send_knowledge_writer.send(SendKnowledgeEvent {
+                            source: source_entity,
+                            target: event.target,
+                            knowledge_id,
+                        });
+
+                        nothing_to_share = false;
+
+                        break; // only ONE will be shared
+                    }
+                }
+
+                if nothing_to_share {
+                    share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
+                        target: source_entity,
+                        success: false,
+                        should_trigger_feedback: true,
+                    });
+                    share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
+                        target: event.target,
+                        success: false,
+                        should_trigger_feedback: false,
+                    });
+                }
+            }
+        }
+    }
+}
+
+pub fn handle_knowlegde_shared_system(
+    mut source_query: Query<
+        (&KnowledgeSharingInteraction, &mut AgentKnowledge),
+        (With<KnowledgeSharingInteraction>, With<Interacting>),
+    >,
+    mut send_knowledge_reader: EventReader<SendKnowledgeEvent>,
     mut share_knowledge_finalized_writer: EventWriter<ShareKnowledgeFinalizedEvent>,
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
-    for event in share_knowledge_reader.read() {
-        add_log_writer.send(AddLogEntry::new(
-            event.target,
-            "arrive handle_knowlegde_share_finalized_system",
-        ));
-        if let Ok((target_entity, knowledge_sharing, target_agent_knowledge)) =
-            &mut target_query.get_mut(event.target)
+    for event in send_knowledge_reader.read() {
+        if let Ok((knowledge_sharing, source_agent_knowledge)) =
+            &mut source_query.get_mut(event.source)
         {
-            target_agent_knowledge.add(event.knowledge_id);
+            add_log_writer.send(AddLogEntry::new(
+                event.source,
+                format!(
+                    "Received requested knowledge from {}",
+                    knowledge_sharing.partner_name
+                )
+                .as_str(),
+            ));
+
+            source_agent_knowledge.add(event.knowledge_id);
 
             share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
-                target: target_entity.clone(),
+                target: event.source,
                 success: true,
+                should_trigger_feedback: true,
             });
-            share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
-                target: knowledge_sharing.partner,
-                success: true,
-            });
-        } else {
-            panic!("Target of ShareKnowledgeEvent was not found")
         }
+
+        share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
+            target: event.target,
+            success: true,
+            should_trigger_feedback: false,
+        });
     }
 }
 
 pub fn share_knowledge_finalized_system(
     mut share_knowledge_finalized_reader: EventReader<ShareKnowledgeFinalizedEvent>,
-    mut agent_query: Query<
-        (Entity, Option<&mut TalkTask>),
-        (With<KnowledgeSharingInteraction>, With<Interacting>),
-    >,
     mut add_log_writer: EventWriter<AddLogEntry>,
     mut commands: Commands,
 ) {
     for event in share_knowledge_finalized_reader.read() {
         add_log_writer.send(AddLogEntry::new(
             event.target,
-            "arrive share_knowledge_finalized_system",
+            format!(
+                "Finishing knowledge sharing with {}",
+                if event.success { "SUCCESS" } else { "FAILURE" }
+            )
+            .as_str(),
         ));
-        if let Ok((_, task_opt)) = agent_query.get_mut(event.target) {
-            if let Some(mut task) = task_opt {
-                // source
-                if event.success {
-                    commands.entity(event.target).insert(Idle).remove::<(
-                        Interacting,
-                        KnowledgeSharingInteraction,
-                        TalkTask,
-                    )>();
-                } else {
-                    if task.current_interaction.is_none() {
-                        panic!("current_interaction must be Some")
-                    }
 
-                    let partner = task.current_interaction.unwrap().1;
-                    task.tried.push(partner);
-                    task.current_interaction = None;
-                    commands
-                        .entity(event.target)
-                        .remove::<(Interacting, KnowledgeSharingInteraction)>();
-                }
+        println!(
+            "share_knowledge_finalized_system: {} at {:?} - {:?}",
+            event.target,
+            SystemTime::now().duration_since(UNIX_EPOCH).ok().unwrap(),
+            event
+        );
+
+        commands
+            .entity(event.target)
+            .remove::<(Interacting, KnowledgeSharingInteraction)>();
+
+        if event.should_trigger_feedback {
+            if event.success {
+                commands.trigger(TalkFinishedWithSuccess {
+                    target: event.target,
+                });
             } else {
-                // target
-                commands
-                    .entity(event.target)
-                    .remove::<(Interacting, KnowledgeSharingInteraction)>();
+                commands.trigger(TalkFinishedWithFailure {
+                    target: event.target,
+                });
             }
         }
     }

@@ -18,7 +18,6 @@ use crate::ecs::logs::*;
 use crate::ecs::roles::none::NoneRole;
 use crate::ecs::roles::plugin::RolesPlugin;
 use crate::ecs::roles::seller::SellerRole;
-use crate::ecs::roles::{none::*, seller::*};
 use crate::ecs::sell::plugin::SellPlugin;
 use crate::ecs::talk::interaction::components::KnowledgeSharingInteraction;
 use crate::ecs::talk::plugin::TalkPlugin;
@@ -27,12 +26,34 @@ use crate::ecs::trade::plugin::TradePlugin;
 use crate::ecs::ui::plugin::UiPlugin;
 use crate::ecs::utils::get_random_vec3;
 
+#[derive(States, Clone, Eq, PartialEq, Debug, Hash, Default)]
+enum GameState {
+    #[default]
+    Running,
+    Paused,
+}
+
+fn toggle_pause(
+    keys: Res<ButtonInput<KeyCode>>,
+    state: Res<State<GameState>>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    if keys.just_pressed(KeyCode::Escape) {
+        if *state == GameState::Running {
+            next_state.set(GameState::Paused);
+        } else {
+            next_state.set(GameState::Running);
+        }
+    }
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(LogPlugin {
             level: Level::DEBUG, // Set minimum level to show debug logs
             ..default()
         }))
+        .init_state::<GameState>()
         .add_event::<AddLogEntry>()
         .add_plugins(TradePlugin)
         .add_plugins(TalkPlugin)
@@ -43,17 +64,23 @@ fn main() {
         .add_plugins(BuyPlugin)
         .add_plugins(UiPlugin)
         .add_systems(Startup, setup)
-        .add_systems(First, update_agents)
-        .add_systems(PreUpdate, check_idle_agents_needs)
+        .add_systems(
+            First,
+            (update_agents, check_idle_agents_needs)
+                .chain()
+                .run_if(in_state(GameState::Running)),
+        )
+        .add_systems(
+            PreUpdate,
+            check_agent_interaction_queue_system.run_if(in_state(GameState::Running)),
+        )
         .add_systems(
             Update,
-            (
-                check_agent_interaction_queue_system,
-                handle_walking_action,
-                add_logs_system,
-            )
-                .chain(),
+            (handle_walking_action, add_logs_system)
+                .chain()
+                .run_if(in_state(GameState::Running)),
         )
+        .add_systems(Last, toggle_pause)
         .run();
 }
 
@@ -75,55 +102,63 @@ fn update_agents(mut query: Query<&mut Agent>) {
 }
 
 fn check_agent_interaction_queue_system(
-    mut query: Query<(Entity, &Name, &mut AgentInteractionQueue), Without<Interacting>>,
+    mut query: Query<
+        (Entity, &Name, &mut AgentInteractionQueue),
+        (Without<Interacting>, Without<WaitingInteraction>),
+    >,
     mut commands: Commands,
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
-    for (entity, name, mut agent_interation_queue) in &mut query {
+    for (target_entity, target_name, mut agent_interation_queue) in &mut query {
         if !agent_interation_queue.is_empty() {
             if let Some(interaction) = agent_interation_queue.pop_first() {
                 match interaction.kind {
                     AgentInteractionKind::Ask(sharing) => {
                         add_log_writer.send(AddLogEntry::new(
-                            entity,
-                            format!("Received Ask Interaction from {}", sharing.partner).as_str(),
+                            target_entity,
+                            format!("Received Ask Interaction from {}", sharing.partner_name)
+                                .as_str(),
                         ));
                         add_log_writer.send(AddLogEntry::new(
-                            sharing.partner,
-                            format!("Start Ask Interaction with target {}", name).as_str(),
+                            sharing.source,
+                            format!("Start Ask Interaction with target {}", target_name).as_str(),
                         ));
+
                         commands
-                            .entity(sharing.partner)
-                            .insert((
-                                Interacting,
-                                KnowledgeSharingInteraction {
-                                    seller_of: sharing.seller_of,
-                                    partner: entity,
-                                },
+                            .entity(sharing.source)
+                            .insert(KnowledgeSharingInteraction::new(
+                                sharing.seller_of,
+                                sharing.source,
+                                target_entity,
+                                target_name.clone(),
                             ))
                             .remove::<WaitingInteraction>();
 
-                        commands.entity(entity).insert((Interacting, sharing));
+                        commands.entity(target_entity).insert(sharing);
                     }
                     AgentInteractionKind::Trade(trade_component) => {
                         add_log_writer.send(AddLogEntry::new(
-                            entity,
+                            target_entity,
                             format!("Start Trade Interaction with {}", trade_component.partner)
                                 .as_str(),
                         ));
                         add_log_writer.send(AddLogEntry::new(
                             trade_component.partner,
-                            format!("Start Trade Interaction with {}", entity).as_str(),
+                            format!("Start Trade Interaction with {}", target_entity).as_str(),
                         ));
+
                         commands
                             .entity(trade_component.partner)
                             .insert(Interacting)
                             .remove::<WaitingInteraction>();
                         commands
-                            .entity(entity)
+                            .entity(target_entity)
                             .insert(TradeInteraction::new(trade_component));
                     }
                 };
+                // this will start only ONE interaction by frame
+                // and avoid the same agent start two interactions in the same frame
+                break;
             }
         }
     }
@@ -176,7 +211,7 @@ fn setup(
 
     let scale = Vec3::splat(1.0);
 
-    for _ in 0..5 {
+    for i in 0..5 {
         let entity_id = commands.spawn_empty().id();
 
         let v = get_random_vec3();
@@ -194,7 +229,7 @@ fn setup(
             Transform::from_scale(scale).with_translation(v),
             AnimationConfig::new(),
             AgentInteractionQueue::new(),
-            Name::new("the happier seller"),
+            Name::new(format!("the happier meat seller {}", i)),
             AgentLogs::new(),
             SellerRole { location: v },
             Idle,
@@ -207,7 +242,7 @@ fn setup(
         });
     }
 
-    for _ in 0..5 {
+    for i in 0..5 {
         let entity_id = commands.spawn_empty().id();
 
         let v = get_random_vec3();
@@ -225,7 +260,7 @@ fn setup(
             Transform::from_scale(scale).with_translation(v),
             AnimationConfig::new(),
             AgentInteractionQueue::new(),
-            Name::new("the happier seller"),
+            Name::new(format!("the happier water seller {}", i)),
             AgentLogs::new(),
             SellerRole { location: v },
             Idle,
@@ -238,7 +273,7 @@ fn setup(
         });
     }
 
-    for i in 0..50 {
+    for i in 0..150 {
         let entity_id = commands.spawn_empty().id();
 
         commands.entity(entity_id).insert((

@@ -1,21 +1,21 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, utils::HashSet};
 
-use crate::ecs::talk::action::components::TalkAction;
+use crate::core::item::ItemEnum;
 
 type InteractionId = usize;
 
 #[derive(Component, Debug)]
 pub struct TalkTask {
-    pub content: TalkAction,
-    pub tried: Vec<Entity>,
-    pub current_interaction: Option<(InteractionId, Entity)>,
+    pub seller_of: ItemEnum,
+    pub tried: HashSet<Entity>,
+    pub current_interaction: Option<(InteractionId, Entity, Name)>,
 }
 
 impl TalkTask {
-    pub fn new(content: TalkAction) -> Self {
+    pub fn new(seller_of: ItemEnum) -> Self {
         Self {
-            content,
-            tried: vec![],
+            seller_of,
+            tried: HashSet::new(),
             current_interaction: None,
         }
     }

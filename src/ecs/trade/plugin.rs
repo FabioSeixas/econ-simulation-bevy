@@ -1,7 +1,8 @@
-use bevy::app::{App, Plugin, Update};
+use bevy::prelude::*;
 
 use crate::ecs::trade::events::*;
 use crate::ecs::trade::systems::*;
+use crate::GameState;
 
 pub struct TradePlugin;
 
@@ -17,7 +18,8 @@ impl Plugin for TradePlugin {
                     buyer_evaluates_offer_system,
                     handle_offer_agreed_system,
                     handle_trade_finalized,
-                ),
+                )
+                    .run_if(in_state(GameState::Running)),
             );
     }
 }

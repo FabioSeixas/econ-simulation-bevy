@@ -1,15 +1,17 @@
 use bevy_egui::{egui, EguiContexts};
 
 use bevy::{
+    color::{palettes::css::YELLOW, Color},
     core::Name,
     ecs::{
         entity::Entity,
         query::With,
-        system::{Query, Res, ResMut},
+        system::{Local, Query, Res, ResMut},
     },
     input::{mouse::MouseButton, ButtonInput},
     math::{primitives::InfinitePlane3d, Dir3, Vec3},
     render::camera::Camera,
+    sprite::Sprite,
     transform::components::{GlobalTransform, Transform},
     window::{PrimaryWindow, Window},
 };
@@ -19,10 +21,7 @@ use crate::ecs::{
     components::{Interacting, WaitingInteraction},
     consume::{actions::components::Consuming, tasks::components::ConsumeTask},
     sell::actions::components::Selling,
-    talk::{
-        action::components::TalkAction, interaction::components::KnowledgeSharingInteraction,
-        task::components::TalkTask,
-    },
+    talk::{interaction::components::KnowledgeSharingInteraction, task::components::TalkTask},
     trade::components::TradeNegotiation,
     ui::resources::SelectedAgent,
 };
@@ -37,11 +36,11 @@ use crate::{
 
 pub fn agent_selection_system(
     mut selected_agent: ResMut<SelectedAgent>,
-    // 1. Query for the primary window specifically
     window_query: Query<&Window, With<PrimaryWindow>>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    agent_query: Query<(Entity, &Name, &Transform)>,
+    mut local: Local<Color>,
+    mut agent_query: Query<(Entity, &Name, &Transform, &mut Sprite)>,
 ) {
     if !mouse_buttons.just_pressed(MouseButton::Left) {
         return;
@@ -70,15 +69,29 @@ pub fn agent_selection_system(
 
     if let Some(world_pos) = world_pos {
         let mut clicked_on_agent = false;
-        for (agent_entity, name, agent_transform) in &agent_query {
+
+        if let Some(entity) = selected_agent.entity {
+            if let Ok((_, _, _, mut sprite)) = agent_query.get_mut(entity) {
+                sprite.color = *local;
+            }
+        }
+
+        for (agent_entity, name, agent_transform, mut sprite) in &mut agent_query {
             // The rest of the logic is the same, just using the new world_pos
             let distance = world_pos
                 .truncate()
                 .distance(agent_transform.translation.truncate());
             if distance < 32.0 {
                 println!("Selected agent {:?} - {:?}", agent_entity, name);
+                println!("Agent sprite color {:?}", sprite.color);
+
+                *local = sprite.color;
+                sprite.color = Color::srgb(YELLOW.red, YELLOW.green, YELLOW.blue);
+
                 selected_agent.entity = Some(agent_entity);
+
                 clicked_on_agent = true;
+
                 break;
             }
         }
@@ -105,7 +118,6 @@ pub fn agent_ui_panel_system(
     interaction_data_query: Query<(
         Option<&TradeNegotiation>,
         Option<&KnowledgeSharingInteraction>,
-        Option<&TalkAction>,
     )>,
 ) {
     // Check if an agent is selected. If not, we don't draw anything.
@@ -170,8 +182,12 @@ pub fn agent_ui_panel_system(
                     ui.label("Consume Task");
                 }
 
-                if let Some(_) = knowledge {
-                    ui.label("ObtainKnowledgeTask Task");
+                if let Some(v) = knowledge {
+                    ui.label("Obtain Knowledge Task");
+                    ui.label(format!("Tried: {:?}", v.tried));
+                    if let Some(i) = &v.current_interaction {
+                        ui.label(format!("Current interaction with {}", i.2));
+                    }
                 }
             }
             ui.separator();
@@ -189,19 +205,17 @@ pub fn agent_ui_panel_system(
             ui.separator();
 
             ui.label("CURRENT Interaction Data:");
-            if let Ok((trade, knowledge_interaction, knowledge)) =
-                interaction_data_query.get(selected_entity)
+            if let Ok((trade, knowledge_interaction)) = interaction_data_query.get(selected_entity)
             {
                 if let Some(_) = trade {
                     ui.label("TradeNegotiation");
                 }
 
-                if let Some(_) = knowledge {
-                    ui.label("KnowledgeSharing");
-                }
-
-                if let Some(_) = knowledge_interaction {
-                    ui.label("KnowledgeSharingInteraction");
+                if let Some(v) = knowledge_interaction {
+                    ui.label(format!(
+                        "KnowledgeSharingInteraction - partner: {}",
+                        v.partner_name
+                    ));
                 }
             }
             ui.separator();

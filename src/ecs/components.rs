@@ -27,6 +27,12 @@ impl WaitingInteraction {
             resting_duration: 5.,
         }
     }
+
+    pub fn new_with(resting_duration: f32) -> Self {
+        Self {
+            resting_duration,
+        }
+    }
 }
 
 impl DurationAction for WaitingInteraction {
@@ -52,7 +58,7 @@ impl Walking {
         }
     }
 
-    pub fn new_with_not_idle(destination: Vec3) -> Self {
+    pub fn new_without_idle(destination: Vec3) -> Self {
         Self {
             destination,
             should_set_idle: false,

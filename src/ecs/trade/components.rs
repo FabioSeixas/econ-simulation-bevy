@@ -13,7 +13,7 @@ pub struct TradeNegotiation {
 
 #[derive(Bundle, Debug)]
 pub struct TradeInteraction {
-    interacting: Interacting,
+    interacting: Interacting, // TODO: use #[require(Interacting)]
     pub trade: TradeNegotiation,
 }
 

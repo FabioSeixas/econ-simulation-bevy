@@ -2,12 +2,16 @@ use bevy::prelude::*;
 
 use crate::ecs::roles::none::*;
 use crate::ecs::roles::seller::*;
+use crate::GameState;
 
 pub struct RolesPlugin;
 
 impl Plugin for RolesPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (handle_idle_sellers, handle_idle_none_role))
-            .add_observer(handle_selling_removed_from_seller);
+        app.add_systems(
+            Update,
+            (handle_idle_sellers, handle_idle_none_role).run_if(in_state(GameState::Running)),
+        )
+        .add_observer(handle_selling_removed_from_seller);
     }
 }

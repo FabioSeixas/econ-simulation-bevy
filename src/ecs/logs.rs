@@ -22,7 +22,10 @@ impl AgentLogs {
         if description.contains("Start Consuming") {
             if let Some(v) = self.logs.last() {
                 if v.description.contains("Start Consuming") {
-                    println!("{:?}", self.logs);
+                    for log in self.logs.clone() {
+                        println!("{:?} at {:?}", log.description, log.time);
+                    }
+                    panic!("several start consuming");
                 }
             }
         }

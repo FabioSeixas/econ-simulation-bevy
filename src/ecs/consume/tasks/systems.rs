@@ -16,7 +16,7 @@ pub fn handle_consume_task(
             continue;
         } else if consume_task.location.distance(transform.translation) > 50. {
             add_log_writer.send(AddLogEntry::new(entity, "Start Walking to consume"));
-            let walking = Walking::new_with_not_idle(consume_task.location);
+            let walking = Walking::new_without_idle(consume_task.location);
             commands.entity(entity).insert(walking);
         } else {
             add_log_writer.send(AddLogEntry::new(entity, "Start Consuming"));
@@ -30,6 +30,7 @@ pub fn handle_consume_task(
 pub fn handle_pause_while_consume_task(
     mut query: Query<
         (
+            Entity,
             &mut ConsumeTask,
             Option<&Interacting>,
             Option<&Consuming>,
@@ -37,13 +38,30 @@ pub fn handle_pause_while_consume_task(
         ),
         Or<(Added<Interacting>, Added<Consuming>, Added<Walking>)>,
     >,
+    mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
-    for (mut task, maybe_interacting, maybe_consuming, maybe_walking) in &mut query {
+    for (entity, mut task, maybe_interacting, maybe_consuming, maybe_walking) in &mut query {
         if let Some(_) = maybe_interacting {
+            add_log_writer.send(AddLogEntry::new(
+                entity,
+                "Pausing ConsumeTask due to Interacting",
+            ));
             task.pause(PauseReason::Interacting);
-        } else if let Some(_) = maybe_consuming {
+        } 
+
+        if let Some(_) = maybe_consuming {
+            add_log_writer.send(AddLogEntry::new(
+                entity,
+                "Pausing ConsumeTask due to Consuming",
+            ));
             task.pause(PauseReason::Consuming);
-        } else if let Some(_) = maybe_walking {
+        } 
+
+        if let Some(_) = maybe_walking {
+            add_log_writer.send(AddLogEntry::new(
+                entity,
+                "Pausing ConsumeTask due to Walking",
+            ));
             task.pause(PauseReason::Walking);
         }
     }
@@ -51,18 +69,28 @@ pub fn handle_pause_while_consume_task(
 
 pub fn handle_resume_consume_task_on_interacting_removed(
     trigger: Trigger<OnRemove, Interacting>,
+    mut add_log_writer: EventWriter<AddLogEntry>,
     mut query: Query<&mut ConsumeTask>,
 ) {
     if let Ok(mut task) = query.get_mut(trigger.entity()) {
+        add_log_writer.send(AddLogEntry::new(
+            trigger.entity(),
+            "Resuming ConsumeTask after Interacting",
+        ));
         task.resume(PauseReason::Interacting);
     }
 }
 
 pub fn handle_resume_consume_task_on_walking_removed(
     trigger: Trigger<OnRemove, Walking>,
+    mut add_log_writer: EventWriter<AddLogEntry>,
     mut query: Query<&mut ConsumeTask>,
 ) {
     if let Ok(mut task) = query.get_mut(trigger.entity()) {
+        add_log_writer.send(AddLogEntry::new(
+            trigger.entity(),
+            "Resuming ConsumeTask after Walking",
+        ));
         task.resume(PauseReason::Walking);
     }
 }
@@ -70,9 +98,14 @@ pub fn handle_resume_consume_task_on_walking_removed(
 pub fn handle_resume_consume_task_on_consuming_removed(
     trigger: Trigger<OnRemove, Consuming>,
     query: Query<&ConsumeTask>,
+    mut add_log_writer: EventWriter<AddLogEntry>,
     mut commands: Commands,
 ) {
     if let Ok(_) = query.get(trigger.entity()) {
+        add_log_writer.send(AddLogEntry::new(
+            trigger.entity(),
+            "Ending ConsumeTask after Consuming",
+        ));
         commands
             .entity(trigger.entity())
             .insert(Idle)

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{core::item::ItemEnum, ecs::buy::tasks::components::BuyTask};
+use crate::core::item::ItemEnum;
 
 #[derive(Component)]
 pub struct Buying {
@@ -11,12 +11,23 @@ pub struct Buying {
 }
 
 impl Buying {
-    pub fn from_buy_task(task: &BuyTask, seller: Entity) -> Self {
+    pub fn new(item: &ItemEnum, qty: usize, seller: Entity) -> Self {
         Self {
-            qty: task.qty,
-            item: task.item,
+            qty: qty,
+            item: item.clone(),
             seller,
             interaction_id: None,
         }
     }
+}
+
+#[derive(Event)]
+pub struct BuyingSucceeded {
+    pub target: Entity,
+}
+
+#[derive(Event)]
+pub struct BuyingFailed {
+    pub target: Entity,
+    pub seller: Entity,
 }
