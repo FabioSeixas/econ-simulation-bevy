@@ -17,6 +17,7 @@ pub fn handle_buy_action(
     mut add_log_writer: EventWriter<AddLogEntry>,
     mut commands: Commands,
 ) {
+    // TODO: use new interaction start flow
     for (buyer, mut buying, waiting_interaction) in &mut query {
         if let Some(_) = waiting_interaction {
             // nothing

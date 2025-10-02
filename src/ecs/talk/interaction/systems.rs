@@ -14,6 +14,7 @@ use crate::ecs::{
     },
 };
 
+// TODO: make this system a generic system for starting every single interaction
 pub fn handle_knowlegde_share_requested_system(
     mut query: Query<(
         Entity,
