@@ -1,6 +1,7 @@
 mod core;
 mod ecs;
 
+use bevy::core::FrameCount;
 use bevy::log::*;
 use bevy::prelude::*;
 
@@ -19,7 +20,6 @@ use crate::ecs::roles::none::NoneRole;
 use crate::ecs::roles::plugin::RolesPlugin;
 use crate::ecs::roles::seller::SellerRole;
 use crate::ecs::sell::plugin::SellPlugin;
-use crate::ecs::talk::interaction::components::KnowledgeSharingInteraction;
 use crate::ecs::talk::plugin::TalkPlugin;
 use crate::ecs::trade::components::*;
 use crate::ecs::trade::plugin::TradePlugin;
@@ -55,6 +55,8 @@ fn main() {
         }))
         .init_state::<GameState>()
         .add_event::<AddLogEntry>()
+        .add_event::<InteractionStarted>()
+        .add_event::<InteractionTimedOut>()
         .add_plugins(TradePlugin)
         .add_plugins(TalkPlugin)
         .add_plugins(ConsumePlugin)
@@ -66,31 +68,41 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(
             First,
-            (update_agents, check_idle_agents_needs)
+            (
+                update_agents,
+                check_idle_agents_needs,
+                interaction_timeout_system,
+            )
                 .chain()
                 .run_if(in_state(GameState::Running)),
         )
         .add_systems(
             PreUpdate,
-            check_agent_interaction_queue_system.run_if(in_state(GameState::Running)),
-        )
-        .add_systems(
-            Update,
-            (handle_walking_action, add_logs_system)
+            (
+                receive_interaction_started_system,
+                check_agent_interaction_queue_system,
+            )
                 .chain()
                 .run_if(in_state(GameState::Running)),
         )
+        .add_systems(
+            Update,
+            handle_walking_action.run_if(in_state(GameState::Running)),
+        )
+        .add_systems(PostUpdate, add_logs_system)
         .add_systems(Last, toggle_pause)
+        .add_observer(remove_timed_out_interaction_from_agent_queue)
         .run();
 }
 
 pub fn add_logs_system(
     mut agent_query: Query<&mut AgentLogs>,
     mut add_logs_reader: EventReader<AddLogEntry>,
+    frame_count: Res<FrameCount>
 ) {
     for event in add_logs_reader.read() {
         if let Ok(mut agent_logs) = agent_query.get_mut(event.target) {
-            agent_logs.add(&event.description);
+            agent_logs.add(&event.description, frame_count.0);
         }
     }
 }
@@ -101,61 +113,152 @@ fn update_agents(mut query: Query<&mut Agent>) {
     }
 }
 
+#[derive(Event, Debug)]
+pub struct InteractionStarted {
+    pub target: Entity,
+    pub item: AgentInteractionItem,
+}
+
+fn interaction_timeout_system(
+    mut query: Query<&mut Interacting>,
+    mut command: Commands,
+    time: Res<Time>,
+) {
+    for mut interacting in &mut query {
+        if interacting.get_resting_duration() > 0. {
+            interacting.progress(time.delta_secs());
+        } else if interacting.is_timed_out() {
+            // nothing
+        } else {
+            interacting.set_timed_out();
+            command.trigger(InteractionTimedOut { id: interacting.id });
+        }
+    }
+}
+
+fn remove_timed_out_interaction_from_agent_queue(
+    trigger: Trigger<InteractionTimedOut>,
+    mut query: Query<(&mut AgentInteractionQueue, &Interacting)>,
+) {
+    for (mut agent_interation_queue, _) in &mut query {
+        if !agent_interation_queue.is_empty() {
+            agent_interation_queue.rm_id(trigger.id);
+        }
+    }
+}
+
+fn receive_interaction_started_system(
+    mut query: Query<(&mut AgentInteractionQueue, &WaitingInteraction)>,
+    mut add_log_writer: EventWriter<AddLogEntry>,
+    mut interaction_started_reader: EventReader<InteractionStarted>,
+) {
+    for event in interaction_started_reader.read() {
+        if let Ok((mut agent_interaction_queue, _)) = query.get_mut(event.target) {
+            add_log_writer.send(AddLogEntry::new(
+                event.target,
+                format!("Received InteractionStarted event. Id: {}", event.item.id).as_str(),
+            ));
+
+            agent_interaction_queue.add(event.item.clone());
+        }
+    }
+}
+
 fn check_agent_interaction_queue_system(
     mut query: Query<
-        (Entity, &Name, &mut AgentInteractionQueue),
-        (Without<Interacting>, Without<WaitingInteraction>),
+        (
+            Entity,
+            &Name,
+            &mut AgentInteractionQueue,
+            Option<&WaitingInteraction>,
+        ),
+        // (Without<Interacting>, Without<WaitingInteraction>),
+        Without<Interacting>,
     >,
     mut commands: Commands,
     mut add_log_writer: EventWriter<AddLogEntry>,
+    mut interaction_started_writer: EventWriter<InteractionStarted>,
 ) {
-    for (target_entity, target_name, mut agent_interation_queue) in &mut query {
+    for (target_entity, target_name, mut agent_interation_queue, maybe_waiting_interaction) in
+        &mut query
+    {
         if !agent_interation_queue.is_empty() {
-            if let Some(interaction) = agent_interation_queue.pop_first() {
-                match interaction.kind {
+            let mut maybe_trigger_for_entity: Option<Entity> = None;
+
+            if let Some(interaction_item) = agent_interation_queue.pop_first() {
+                match &interaction_item.kind {
                     AgentInteractionKind::Ask(sharing) => {
+                        if let Some(waiting) = maybe_waiting_interaction {
+                            if waiting.id == interaction_item.id {
+                                add_log_writer.send(AddLogEntry::new(
+                                    target_entity,
+                                    format!(
+                                        "Remove WaitingInteraction and starting Interacting. source {}. target: {}. Id: {}",
+                                        sharing.source_name,
+                                        sharing.target_name,
+                                        interaction_item.id
+                                    )
+                                    .as_str(),
+                                ));
+
+                                commands
+                                    .entity(sharing.source)
+                                    .insert((
+                                        sharing.clone(),
+                                        Interacting::new_with_id(interaction_item.id),
+                                    ))
+                                    .remove::<WaitingInteraction>();
+
+                                break;
+                            }
+                        }
+
                         add_log_writer.send(AddLogEntry::new(
                             target_entity,
-                            format!("Received Ask Interaction from {}", sharing.partner_name)
-                                .as_str(),
-                        ));
-                        add_log_writer.send(AddLogEntry::new(
-                            sharing.source,
-                            format!("Start Ask Interaction with target {}", target_name).as_str(),
+                            format!(
+                                "Received Ask Interaction. source {}. target: {}. Id: {}",
+                                sharing.source_name, sharing.target_name, interaction_item.id
+                            )
+                            .as_str(),
                         ));
 
-                        commands
-                            .entity(sharing.source)
-                            .insert(KnowledgeSharingInteraction::new(
-                                sharing.seller_of,
-                                sharing.source,
-                                target_entity,
-                                target_name.clone(),
-                            ))
-                            .remove::<WaitingInteraction>();
-
-                        commands.entity(target_entity).insert(sharing);
+                        maybe_trigger_for_entity = Some(sharing.source);
+                        commands.entity(target_entity).insert((
+                            sharing.clone(),
+                            Interacting::new_with_id(interaction_item.id),
+                        ));
                     }
-                    AgentInteractionKind::Trade(trade_component) => {
+                    AgentInteractionKind::Trade(trade_negotiation) => {
                         add_log_writer.send(AddLogEntry::new(
                             target_entity,
-                            format!("Start Trade Interaction with {}", trade_component.partner)
+                            format!("Start Trade Interaction with {}", trade_negotiation.partner)
                                 .as_str(),
                         ));
                         add_log_writer.send(AddLogEntry::new(
-                            trade_component.partner,
-                            format!("Start Trade Interaction with {}", target_entity).as_str(),
+                            trade_negotiation.partner,
+                            format!("Start Trade Interaction with {}", target_name).as_str(),
                         ));
 
+                        // TODO: use interaction started event
                         commands
-                            .entity(trade_component.partner)
-                            .insert(Interacting)
+                            .entity(trade_negotiation.partner)
+                            .insert(Interacting::new_with_id(interaction_item.id))
                             .remove::<WaitingInteraction>();
-                        commands
-                            .entity(target_entity)
-                            .insert(TradeInteraction::new(trade_component));
+
+                        commands.entity(target_entity).insert(TradeInteraction::new(
+                            trade_negotiation.clone(),
+                            interaction_item.id,
+                        ));
                     }
                 };
+
+                if let Some(source_entity) = maybe_trigger_for_entity {
+                    interaction_started_writer.send(InteractionStarted {
+                        item: interaction_item,
+                        target: source_entity,
+                    });
+                }
+
                 // this will start only ONE interaction by frame
                 // and avoid the same agent start two interactions in the same frame
                 break;

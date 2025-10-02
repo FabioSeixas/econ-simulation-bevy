@@ -1,15 +1,14 @@
 use bevy::prelude::*;
 
 use crate::core::item::ItemEnum;
-use crate::ecs::components::Interacting;
 
 #[derive(Component, Debug, Clone)]
-#[require(Interacting)]
 pub struct KnowledgeSharingInteraction {
     pub seller_of: ItemEnum,
     pub source: Entity,
     pub target: Entity,
-    pub partner_name: Name,
+    pub source_name: Name,
+    pub target_name: Name,
     status: KnowledgeSharingInteractionEnum,
 }
 
@@ -20,12 +19,13 @@ pub enum KnowledgeSharingInteractionEnum {
 }
 
 impl KnowledgeSharingInteraction {
-    pub fn new(seller_of: ItemEnum, source: Entity, target: Entity, partner_name: Name) -> Self {
+    pub fn new(seller_of: ItemEnum, source: Entity, target: Entity, source_name: Name, target_name: Name) -> Self {
         Self {
             seller_of,
             source,
             target,
-            partner_name,
+            source_name,
+            target_name,
             status: KnowledgeSharingInteractionEnum::WaitingSourceAgent,
         }
     }

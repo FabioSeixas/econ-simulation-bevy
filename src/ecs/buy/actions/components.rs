@@ -1,13 +1,13 @@
 use bevy::prelude::*;
 
-use crate::core::item::ItemEnum;
+use crate::{core::item::ItemEnum, ecs::components::InteractionId};
 
 #[derive(Component)]
 pub struct Buying {
     pub item: ItemEnum,
     pub qty: usize,
     pub seller: Entity,
-    pub interaction_id: Option<usize>,
+    pub interaction_id: Option<InteractionId>,
 }
 
 impl Buying {

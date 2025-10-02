@@ -1,8 +1,6 @@
 use bevy::{prelude::*, utils::HashSet};
 
-use crate::core::item::ItemEnum;
-
-type InteractionId = usize;
+use crate::{core::item::ItemEnum, ecs::components::InteractionId};
 
 #[derive(Component, Debug)]
 pub struct TalkTask {

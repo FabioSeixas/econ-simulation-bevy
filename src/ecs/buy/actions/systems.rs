@@ -10,11 +10,7 @@ use crate::ecs::trade::components::*;
 
 pub fn handle_buy_action(
     mut query: Query<
-        (
-            Entity,
-            &mut Buying,
-            Option<&mut WaitingInteraction>,
-        ),
+        (Entity, &mut Buying, Option<&mut WaitingInteraction>),
         Without<Interacting>, // (With<Buying>, Without<Idle>, Without<Interacting>),
     >,
     mut query_seller: Query<&mut AgentInteractionQueue, With<Selling>>,
@@ -57,9 +53,11 @@ pub fn handle_buy_action(
                 price: None,
                 partner: buying.seller.clone(),
             };
-            commands
-                .entity(buyer)
-                .insert((buyer_trade_marker, WaitingInteraction::new()));
+
+            let waiting = WaitingInteraction::new();
+            let interaction_id = waiting.id;
+
+            commands.entity(buyer).insert((buyer_trade_marker, waiting));
 
             let seller_trade_marker = TradeNegotiation {
                 role: TradeRole::Seller,
@@ -69,10 +67,12 @@ pub fn handle_buy_action(
                 partner: buyer,
             };
 
-            let id = seller_agent_interaction_queue
-                .add(AgentInteractionKind::Trade(seller_trade_marker));
+            seller_agent_interaction_queue.add(AgentInteractionItem {
+                id: interaction_id,
+                kind: AgentInteractionKind::Trade(seller_trade_marker),
+            });
 
-            buying.interaction_id = Some(id);
+            buying.interaction_id = Some(interaction_id);
         } else {
             add_log_writer.send(AddLogEntry::new(buyer, "Seller not found, removing Buying"));
 

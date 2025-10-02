@@ -4,6 +4,7 @@ use bevy::prelude::*;
 
 use crate::ecs::{
     components::Interacting,
+    interaction::InteractionTimedOut,
     knowledge::AgentKnowledge,
     logs::AddLogEntry,
     talk::{
@@ -27,8 +28,8 @@ pub fn handle_knowlegde_share_requested_system(
             add_log_writer.send(AddLogEntry::new(
                 entity,
                 format!(
-                    "KnowledgeSharingInteraction -> Start {}",
-                    knowledge_sharing.partner_name
+                    "KnowledgeSharingInteraction -> Start with {}",
+                    knowledge_sharing.target_name
                 )
                 .as_str(),
             ));
@@ -48,7 +49,7 @@ pub fn handle_knowlegde_share_requested_system(
                         entity,
                         format!(
                             "KnowledgeSharingInteraction -> Start with {}",
-                            knowledge_sharing.partner_name
+                            knowledge_sharing.source_name
                         )
                         .as_str(),
                     ));
@@ -65,7 +66,7 @@ pub fn handle_knowlegde_share_requested_system(
 }
 
 pub fn handle_knowlegde_share_started_system(
-    target_query: Query<(&KnowledgeSharingInteraction, &AgentKnowledge)>,
+    target_query: Query<(&KnowledgeSharingInteraction, &AgentKnowledge, &Interacting)>,
     source_query: Query<
         (Entity, &AgentKnowledge),
         (With<KnowledgeSharingInteraction>, With<Interacting>),
@@ -76,10 +77,12 @@ pub fn handle_knowlegde_share_started_system(
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
     for event in start_talk_reader.read() {
-        if let Ok((knowledge_sharing, target_agent_knowledge)) = &target_query.get(event.target) {
+        if let Ok((knowledge_sharing, target_agent_knowledge, interacting)) =
+            &target_query.get(event.target)
+        {
             add_log_writer.send(AddLogEntry::new(
                 event.target,
-                format!("Start talking with {}", knowledge_sharing.partner_name).as_str(),
+                format!("Start talking. ID: {}", interacting.id).as_str(),
             ));
 
             if let Ok((source_entity, source_agent_knowledge)) =
@@ -128,7 +131,11 @@ pub fn handle_knowlegde_share_started_system(
 
 pub fn handle_knowlegde_shared_system(
     mut source_query: Query<
-        (&KnowledgeSharingInteraction, &mut AgentKnowledge),
+        (
+            &KnowledgeSharingInteraction,
+            &mut AgentKnowledge,
+            &Interacting,
+        ),
         (With<KnowledgeSharingInteraction>, With<Interacting>),
     >,
     mut send_knowledge_reader: EventReader<SendKnowledgeEvent>,
@@ -136,16 +143,12 @@ pub fn handle_knowlegde_shared_system(
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
     for event in send_knowledge_reader.read() {
-        if let Ok((knowledge_sharing, source_agent_knowledge)) =
+        if let Ok((_, source_agent_knowledge, interacting)) =
             &mut source_query.get_mut(event.source)
         {
             add_log_writer.send(AddLogEntry::new(
                 event.source,
-                format!(
-                    "Received requested knowledge from {}",
-                    knowledge_sharing.partner_name
-                )
-                .as_str(),
+                format!("Received requested knowledge. ID {}", interacting.id).as_str(),
             ));
 
             source_agent_knowledge.add(event.knowledge_id);
@@ -201,6 +204,26 @@ pub fn share_knowledge_finalized_system(
                     target: event.target,
                 });
             }
+        }
+    }
+}
+
+pub fn handle_interaction_timed_out(
+    trigger: Trigger<InteractionTimedOut>,
+    agent_query: Query<(Entity, &Interacting, &KnowledgeSharingInteraction)>,
+    mut add_log_writer: EventWriter<AddLogEntry>,
+    mut commands: Commands,
+) {
+    for (entity, interacting, _) in &agent_query {
+        if trigger.id == interacting.id {
+            add_log_writer.send(AddLogEntry::new(
+                entity,
+                "KnowledgeSharingInteraction -> Interaction timed out",
+            ));
+            commands
+                .entity(entity)
+                .remove::<(Interacting, KnowledgeSharingInteraction)>()
+                .trigger(TalkFinishedWithFailure { target: entity });
         }
     }
 }

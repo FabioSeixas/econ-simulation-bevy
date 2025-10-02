@@ -1,8 +1,11 @@
 use bevy::prelude::*;
 
-use crate::{core::item::ItemEnum, ecs::components::Interacting};
+use crate::{
+    core::item::ItemEnum,
+    ecs::components::{Interacting, InteractionId},
+};
 
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Copy, Debug)]
 pub struct TradeNegotiation {
     pub partner: Entity,
     pub role: TradeRole,
@@ -18,9 +21,9 @@ pub struct TradeInteraction {
 }
 
 impl TradeInteraction {
-    pub fn new(trade: TradeNegotiation) -> Self {
+    pub fn new(trade: TradeNegotiation, interaction_id: InteractionId) -> Self {
         Self {
-            interacting: Interacting,
+            interacting: Interacting::new_with_id(interaction_id),
             trade,
         }
     }

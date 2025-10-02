@@ -3,15 +3,10 @@ use bevy::prelude::*;
 use crate::{
     core::item::ItemEnum,
     ecs::{
-        agent::Agent,
-        buy::{actions::components::Buying, tasks::components::BuyTask},
-        components::{Idle, Interacting},
-        logs::AddLogEntry,
-        sell::actions::components::Selling,
-        trade::{
+        agent::Agent, buy::{actions::components::Buying, tasks::components::BuyTask}, components::{Idle, Interacting}, interaction::InteractionTimedOut, logs::AddLogEntry, sell::actions::components::Selling, trade::{
             components::{TradeInteraction, TradeNegotiation, TradeRole},
             events::{OfferAgreed, OfferMade, TradeFinalized},
-        },
+        }
     },
 };
 
@@ -146,9 +141,11 @@ pub fn handle_trade_finalized(
                         event.target,
                         format!("Trade with {} finished with FAILURE", trade.partner).as_str(),
                     ));
-                    buy_task
-                        .expect("handle_trade_finalized -> buy task must be Some here!")
-                        .add_tried(trade.partner);
+
+                    if let Some(mut task) = buy_task {
+                        task.add_tried(trade.partner);
+                    }
+
                     commands
                         .entity(event.target)
                         .remove::<(TradeInteraction, Buying)>();
@@ -160,6 +157,24 @@ pub fn handle_trade_finalized(
             }
         } else {
             println!("No target agent found for event: {:?}", event);
+        }
+    }
+}
+
+pub fn handle_interaction_timed_out(
+    trigger: Trigger<InteractionTimedOut>,
+    agent_query: Query<(Entity, &Interacting, &TradeNegotiation)>,
+    mut add_log_writer: EventWriter<AddLogEntry>,
+    mut trade_finalized_writer: EventWriter<TradeFinalized>,
+) {
+    for (entity, interacting, _) in &agent_query {
+        if trigger.id == interacting.id {
+            add_log_writer.send(AddLogEntry::new(entity, "Trade -> Interaction timed out"));
+
+            trade_finalized_writer.send(TradeFinalized {
+                target: entity,
+                success: false,
+            });
         }
     }
 }

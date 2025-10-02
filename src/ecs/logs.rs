@@ -6,6 +6,7 @@ use bevy::ecs::{component::Component, entity::Entity, event::Event};
 pub struct LogEntry {
     pub description: String,
     pub time: Duration,
+    pub frame: u32
 }
 
 #[derive(Component)]
@@ -18,7 +19,7 @@ impl AgentLogs {
         Self { logs: vec![] }
     }
 
-    pub fn add(&mut self, description: &String) {
+    pub fn add(&mut self, description: &String, frame: u32) {
         if description.contains("Start Consuming") {
             if let Some(v) = self.logs.last() {
                 if v.description.contains("Start Consuming") {
@@ -32,6 +33,7 @@ impl AgentLogs {
         self.logs.push(LogEntry {
             description: description.clone(),
             time: SystemTime::now().duration_since(UNIX_EPOCH).ok().unwrap(),
+            frame
         })
     }
 

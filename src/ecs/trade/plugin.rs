@@ -11,6 +11,7 @@ impl Plugin for TradePlugin {
         app.add_event::<OfferMade>()
             .add_event::<OfferAgreed>()
             .add_event::<TradeFinalized>()
+            .add_observer(handle_interaction_timed_out)
             .add_systems(
                 Update,
                 (

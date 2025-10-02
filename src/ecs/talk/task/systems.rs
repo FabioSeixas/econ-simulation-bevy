@@ -52,27 +52,33 @@ pub fn handle_added_talk_task(
             if let Ok((_, _, name, mut agent_interation_queue)) =
                 target_agent_query.get_mut(closest_entity)
             {
+                let waiting = WaitingInteraction::new_with(10.);
+                let interaction_id = waiting.id;
+
                 add_log_writer.send(AddLogEntry::new(
                     source_entity,
-                    format!("Sent Ask Interaction request for {}", name).as_str(),
+                    format!(
+                        "Sent Ask Interaction request for {}. ID: {}",
+                        name, interaction_id
+                    )
+                    .as_str(),
                 ));
 
-                talk_task.current_interaction = Some((
-                    agent_interation_queue.add(AgentInteractionKind::Ask(
-                        KnowledgeSharingInteraction::new(
-                            talk_task.seller_of,
-                            source_entity,  // source
-                            closest_entity, // target
-                            source_name.clone(),
-                        ),
+                agent_interation_queue.add(AgentInteractionItem {
+                    id: interaction_id,
+                    kind: AgentInteractionKind::Ask(KnowledgeSharingInteraction::new(
+                        talk_task.seller_of,
+                        source_entity,       // source
+                        closest_entity,      // target
+                        source_name.clone(), // source name
+                        name.clone(),        // target name
                     )),
-                    closest_entity,
-                    name.clone(),
-                ));
+                });
 
-                commands
-                    .entity(source_entity)
-                    .insert(WaitingInteraction::new_with(10.));
+                talk_task.current_interaction =
+                    Some((interaction_id, closest_entity, name.clone()));
+
+                commands.entity(source_entity).insert(waiting);
             }
         } else {
             // TODO
@@ -92,39 +98,25 @@ pub fn handle_waiting_while_talk_task(
         if waiting.get_resting_duration() > 0. {
             waiting.progress(time.delta_secs());
         } else {
-            let (interaction_id, target_entity, _) = task
-                .current_interaction
-                .as_ref()
-                .expect("current_interaction can not be None");
+            add_log_writer.send(AddLogEntry::new(
+                source_entity,
+                format!("WaitingInteraction {} timed out.", waiting.id).as_str(),
+            ));
 
-            if let Ok(mut target_interaction_queue) =
-                target_agent_query.get_mut(target_entity.clone())
-            {
-                add_log_writer.send(AddLogEntry::new(
-                    source_entity,
-                    format!(
-                        "WaitingInteraction timed out. Target queue size before: {}",
-                        target_interaction_queue.len()
-                    )
-                    .as_str(),
-                ));
-                target_interaction_queue.rm_id(interaction_id.clone());
-
-                add_log_writer.send(AddLogEntry::new(
-                    source_entity,
-                    format!(
-                        "Target queue size after: {}",
-                        target_interaction_queue.len()
-                    )
-                    .as_str(),
-                ));
-                commands
-                    .entity(source_entity)
-                    .remove::<(WaitingInteraction, Interaction)>()
-                    .trigger(TalkFinishedWithFailure {
-                        target: source_entity,
-                    });
+            if let Some((interaction_id, target_entity, _)) = task.current_interaction.as_ref() {
+                if let Ok(mut target_interaction_queue) =
+                    target_agent_query.get_mut(target_entity.clone())
+                {
+                    target_interaction_queue.rm_id(interaction_id.clone());
+                }
             }
+
+            commands
+                .entity(source_entity)
+                .remove::<WaitingInteraction>()
+                .trigger(TalkFinishedWithFailure {
+                    target: source_entity,
+                });
         }
     }
 }
@@ -185,12 +177,12 @@ pub fn handle_talk_failure(
 
         add_log_writer.send(AddLogEntry::new(entity, "handle_talk_failure"));
 
-        if let Some((_, partner, partner_name)) = task.current_interaction.take() {
+        if let Some((id, partner, partner_name)) = task.current_interaction.take() {
             add_log_writer.send(AddLogEntry::new(
                 entity,
                 format!(
-                    "TalkTask -> failed with {}, will try with another Agent",
-                    partner_name
+                    "TalkTask -> interaction {} failed with {}, will try with another Agent",
+                    id, partner_name
                 )
                 .as_str(),
             ));

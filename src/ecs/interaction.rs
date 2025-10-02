@@ -1,35 +1,34 @@
 use std::collections::VecDeque;
 
-use bevy::ecs::component::Component;
+use bevy::ecs::{component::Component, event::Event};
 
 use crate::ecs::{
-    talk::interaction::components::KnowledgeSharingInteraction, trade::components::TradeNegotiation,
+    components::InteractionId, talk::interaction::components::KnowledgeSharingInteraction,
+    trade::components::TradeNegotiation,
 };
+
+#[derive(Event, Debug)]
+pub struct InteractionTimedOut {
+    pub id: InteractionId,
+}
 
 #[derive(Component)]
 pub struct AgentInteractionQueue {
-    next_id: usize,
-    queue: VecDeque<AgentInteractionEvent>,
+    queue: VecDeque<AgentInteractionItem>,
 }
 
 impl AgentInteractionQueue {
     pub fn new() -> Self {
         Self {
-            next_id: 0,
             queue: VecDeque::new(),
         }
     }
 
-    pub fn add(&mut self, kind: AgentInteractionKind) -> usize {
-        self.queue.push_back(AgentInteractionEvent {
-            id: self.next_id,
-            kind,
-        });
-        self.next_id += 1;
-        self.next_id
+    pub fn add(&mut self, item: AgentInteractionItem) {
+        self.queue.push_back(item);
     }
 
-    pub fn rm_id(&mut self, rm_id: usize) {
+    pub fn rm_id(&mut self, rm_id: InteractionId) {
         self.queue.retain(|event| event.id != rm_id);
     }
 
@@ -41,14 +40,14 @@ impl AgentInteractionQueue {
         self.queue.len()
     }
 
-    pub fn get_first(&mut self) -> Option<&AgentInteractionEvent> {
+    pub fn get_first(&mut self) -> Option<&AgentInteractionItem> {
         match self.queue.front() {
             None => None,
             Some(v) => Some(v),
         }
     }
 
-    pub fn pop_first(&mut self) -> Option<AgentInteractionEvent> {
+    pub fn pop_first(&mut self) -> Option<AgentInteractionItem> {
         match self.queue.pop_front() {
             None => None,
             Some(v) => Some(v),
@@ -56,13 +55,13 @@ impl AgentInteractionQueue {
     }
 }
 
-#[derive(Debug)]
-pub struct AgentInteractionEvent {
-    pub id: usize,
+#[derive(Debug, Clone)]
+pub struct AgentInteractionItem {
+    pub id: InteractionId,
     pub kind: AgentInteractionKind,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AgentInteractionKind {
     Trade(TradeNegotiation),
     Ask(KnowledgeSharingInteraction),
