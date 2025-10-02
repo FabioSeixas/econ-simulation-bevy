@@ -8,6 +8,7 @@ This is an experiment making a medieval/fantasy economy simulation.
 
 ### On the Horizon
 
+- [ ] Collisions
 - [ ] Skills -> Define quality of crafts, power for negotiation etc
 - [ ] Roles -> Blacksmith, Fisher, Farmer, Livestock Farmer, Hunter, Cook ...
 - [ ] Recipes -> Blacksmith knows how to craft, Cook knows how to prepare food etc

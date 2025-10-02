@@ -69,11 +69,11 @@ pub fn handle_buy_action(
 
 pub fn handle_waiting_interaction_timed_out(
     trigger: Trigger<WaitingInteractionTimedOut>,
-    agent_query: Query<&WaitingInteraction>,
+    agent_query: Query<(&WaitingInteraction, &Buying)>,
     mut add_log_writer: EventWriter<AddLogEntry>,
     mut commands: Commands,
 ) {
-    if let Ok(waiting_interaction) = agent_query.get(trigger.source) {
+    if let Ok((waiting_interaction, _)) = agent_query.get(trigger.source) {
         if trigger.id == waiting_interaction.id {
             add_log_writer.send(AddLogEntry::new(
                 trigger.source,
@@ -93,35 +93,3 @@ pub fn handle_waiting_interaction_timed_out(
         }
     }
 }
-
-// pub fn handle_waiting_interaction_while_buying(
-//     mut query: Query<
-//         (Entity, &Buying, &mut BuyTask, &mut WaitingInteraction),
-//         Without<Interacting>,
-//     >,
-//     mut query_seller: Query<&mut AgentInteractionQueue, With<Selling>>,
-//     mut add_log_writer: EventWriter<AddLogEntry>,
-//     mut commands: Commands,
-//     time: Res<Time>,
-// ) {
-//     for (buyer, buying, mut buy_task, mut waiting) in &mut query {
-//         if waiting.get_resting_duration() > 0. {
-//             waiting.progress(time.delta_secs());
-//         } else {
-//             if let Ok(mut seller_interaction_queue) = query_seller.get_mut(buying.seller) {
-//                 add_log_writer.send(AddLogEntry::new(
-//                     buyer,
-//                     "WaitingInteraction timed out, ending Buying",
-//                 ));
-//                 if buying.interaction_id.is_none() {
-//                     panic!("handle_buy_action, buying.interaction_id must be Some")
-//                 }
-//                 seller_interaction_queue.rm_id(buying.interaction_id.unwrap());
-//                 buy_task.add_tried(buying.seller);
-//                 commands
-//                     .entity(buyer)
-//                     .remove::<(WaitingInteraction, Buying)>();
-//             }
-//         }
-//     }
-// }

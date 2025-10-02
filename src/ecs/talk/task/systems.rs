@@ -24,6 +24,14 @@ pub fn handle_added_talk_task(
             format!("TalkTask -> searching an Agent to ask").as_str(),
         ));
 
+        if talk_task.tried.len() > 3 {
+            // although using TalkFinishedWithSuccess here,
+            // this is a failure
+            commands.trigger(TalkFinishedWithSuccess {
+                target: source_entity
+            });
+        }
+
         let mut best: Option<(Entity, f32)> = None;
         for (entity, target_transform, _, _) in &target_agent_query {
             if entity.eq(&source_entity) {
@@ -88,47 +96,13 @@ pub fn handle_added_talk_task(
     }
 }
 
-// pub fn handle_waiting_while_talk_task(
-//     mut source_agent_query: Query<(Entity, &TalkTask, &mut WaitingInteraction)>,
-//     mut target_agent_query: Query<&mut AgentInteractionQueue>,
-//     time: Res<Time>,
-//     mut add_log_writer: EventWriter<AddLogEntry>,
-//     mut commands: Commands,
-// ) {
-//     for (source_entity, task, mut waiting) in &mut source_agent_query {
-//         if waiting.get_resting_duration() > 0. {
-//             waiting.progress(time.delta_secs());
-//         } else {
-//             add_log_writer.send(AddLogEntry::new(
-//                 source_entity,
-//                 format!("WaitingInteraction {} timed out.", waiting.id).as_str(),
-//             ));
-//
-//             if let Some((interaction_id, target_entity, _)) = task.current_interaction.as_ref() {
-//                 if let Ok(mut target_interaction_queue) =
-//                     target_agent_query.get_mut(target_entity.clone())
-//                 {
-//                     target_interaction_queue.rm_id(interaction_id.clone());
-//                 }
-//             }
-//
-//             commands
-//                 .entity(source_entity)
-//                 .remove::<WaitingInteraction>()
-//                 .trigger(TalkFinishedWithFailure {
-//                     target: source_entity,
-//                 });
-//         }
-//     }
-// }
-
 pub fn handle_waiting_interaction_timed_out(
     trigger: Trigger<WaitingInteractionTimedOut>,
-    agent_query: Query<&WaitingInteraction>,
+    agent_query: Query<(&WaitingInteraction, &TalkTask)>,
     mut add_log_writer: EventWriter<AddLogEntry>,
     mut commands: Commands,
 ) {
-    if let Ok(waiting_interaction) = agent_query.get(trigger.source) {
+    if let Ok((waiting_interaction, _)) = agent_query.get(trigger.source) {
         if trigger.id == waiting_interaction.id {
             add_log_writer.send(AddLogEntry::new(
                 trigger.source,
@@ -211,13 +185,6 @@ pub fn handle_talk_failure(
 ) {
     let entity = trigger.target;
     if let Ok(mut task) = agent_query.get_mut(entity) {
-        // println!(
-        //     "handle_talk_failure: {} at {:?} - {:?}",
-        //     entity,
-        //     SystemTime::now().duration_since(UNIX_EPOCH).ok().unwrap(),
-        //     task
-        // );
-
         if let Some((id, partner, partner_name)) = task.current_interaction.take() {
             add_log_writer.send(AddLogEntry::new(
                 entity,
@@ -230,21 +197,5 @@ pub fn handle_talk_failure(
 
             task.tried.insert(partner);
         }
-
-        // let (_, partner, partner_name) = task
-        //     .current_interaction
-        //     .take()
-        //     .expect("current_interaction must be Some");
-
-        // add_log_writer.send(AddLogEntry::new(
-        //     entity,
-        //     format!(
-        //         "TalkTask -> failed with {}, will try with another Agent",
-        //         partner_name
-        //     )
-        //     .as_str(),
-        // ));
-        //
-        // task.tried.push(partner);
     }
 }
