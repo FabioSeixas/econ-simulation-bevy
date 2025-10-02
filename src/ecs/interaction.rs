@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use bevy::ecs::{component::Component, event::Event};
+use bevy::ecs::{component::Component, entity::Entity, event::Event};
 
 use crate::ecs::{
     components::InteractionId, talk::interaction::components::KnowledgeSharingInteraction,
@@ -10,6 +10,13 @@ use crate::ecs::{
 #[derive(Event, Debug)]
 pub struct InteractionTimedOut {
     pub id: InteractionId,
+}
+
+#[derive(Event, Debug)]
+pub struct WaitingInteractionTimedOut {
+    pub id: InteractionId,
+    pub source: Entity,
+    pub target: Entity,
 }
 
 #[derive(Component)]

@@ -72,6 +72,7 @@ fn main() {
                 update_agents,
                 check_idle_agents_needs,
                 interaction_timeout_system,
+                waiting_interaction_timeout_system,
             )
                 .chain()
                 .run_if(in_state(GameState::Running)),
@@ -92,13 +93,14 @@ fn main() {
         .add_systems(PostUpdate, add_logs_system)
         .add_systems(Last, toggle_pause)
         .add_observer(remove_timed_out_interaction_from_agent_queue)
+        .add_observer(remove_timed_out_waiting_interaction_from_agent_queue)
         .run();
 }
 
 pub fn add_logs_system(
     mut agent_query: Query<&mut AgentLogs>,
     mut add_logs_reader: EventReader<AddLogEntry>,
-    frame_count: Res<FrameCount>
+    frame_count: Res<FrameCount>,
 ) {
     for event in add_logs_reader.read() {
         if let Ok(mut agent_logs) = agent_query.get_mut(event.target) {
@@ -136,11 +138,48 @@ fn interaction_timeout_system(
     }
 }
 
+fn waiting_interaction_timeout_system(
+    mut query: Query<&mut WaitingInteraction>,
+    mut command: Commands,
+    time: Res<Time>,
+) {
+    for mut waiting in &mut query {
+        if waiting.get_resting_duration() > 0. {
+            waiting.progress(time.delta_secs());
+        } else if waiting.is_timed_out() {
+            // nothing
+        } else {
+            waiting.set_timed_out();
+            command.trigger(WaitingInteractionTimedOut {
+                id: waiting.id,
+                source: waiting.source,
+                target: waiting.target,
+            });
+        }
+    }
+}
+
 fn remove_timed_out_interaction_from_agent_queue(
     trigger: Trigger<InteractionTimedOut>,
     mut query: Query<(&mut AgentInteractionQueue, &Interacting)>,
 ) {
     for (mut agent_interation_queue, _) in &mut query {
+        if !agent_interation_queue.is_empty() {
+            agent_interation_queue.rm_id(trigger.id);
+        }
+    }
+}
+
+fn remove_timed_out_waiting_interaction_from_agent_queue(
+    trigger: Trigger<WaitingInteractionTimedOut>,
+    mut query: Query<&mut AgentInteractionQueue>,
+) {
+    if let Ok(mut agent_interation_queue) = query.get_mut(trigger.source) {
+        if !agent_interation_queue.is_empty() {
+            agent_interation_queue.rm_id(trigger.id);
+        }
+    }
+    if let Ok(mut agent_interation_queue) = query.get_mut(trigger.target) {
         if !agent_interation_queue.is_empty() {
             agent_interation_queue.rm_id(trigger.id);
         }

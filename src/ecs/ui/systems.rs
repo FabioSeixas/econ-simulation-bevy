@@ -7,7 +7,7 @@ use bevy::{
         entity::Entity,
         observer::Trigger,
         query::With,
-        system::{Commands, Local, Query, Res, ResMut},
+        system::{Commands, Query, Res, ResMut},
     },
     input::{mouse::MouseButton, ButtonInput},
     math::{primitives::InfinitePlane3d, Dir3, Vec3},
@@ -212,8 +212,8 @@ pub fn agent_ui_panel_system(
                 if let Some(v) = knowledge {
                     ui.label("Obtain Knowledge Task");
                     ui.label(format!("Tried: {:?}", v.tried));
-                    if let Some(i) = &v.current_interaction {
-                        ui.label(format!("Current interaction with {}", i.2));
+                    if let Some((id, _partner, name)) = &v.current_interaction {
+                        ui.label(format!("Current interaction {} with {}", id, name));
                     }
                 }
             }
@@ -222,11 +222,18 @@ pub fn agent_ui_panel_system(
             ui.label("CURRENT Interaction:");
             if let Ok((interacting, waiting_interaction)) = interaction_query.get(selected_entity) {
                 if let Some(v) = interacting {
-                    ui.label(format!("Interacting {}", v.get_resting_duration()));
+                    ui.label(format!("Interacting {} {:.1}", v.id, v.get_resting_duration()));
                 }
 
                 if let Some(w) = waiting_interaction {
-                    ui.label(format!("Waiting Interaction {}", w.get_resting_duration()));
+                    ui.label(format!("Waiting Interaction {} {:.1}", w.id, w.get_resting_duration()));
+                    if ui.button("Select partner").clicked() {
+                        if w.target == selected_entity {
+                            commands.trigger(ChangeSelectedEntity { target: w.source });
+                        } else {
+                            commands.trigger(ChangeSelectedEntity { target: w.target });
+                        }
+                    };
                 }
             }
             ui.separator();
@@ -256,8 +263,8 @@ pub fn agent_ui_panel_system(
 
             // --- Display Agent's Role & Needs ---
             ui.label("DETAILS:");
-            ui.label(format!("Hunger: {:.1}/100", agent.needs.hunger));
-            ui.label(format!("Thirst: {:.1}/100", agent.needs.thirst));
+            ui.label(format!("Hunger: {:.1}/1000", agent.needs.hunger));
+            ui.label(format!("Thirst: {:.1}/1000", agent.needs.thirst));
             ui.separator();
 
             // --- Display Inventory ---

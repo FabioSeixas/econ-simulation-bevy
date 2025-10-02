@@ -6,7 +6,7 @@ use bevy::{
 
 use crate::{
     ecs::buy::{
-        actions::systems::handle_buy_action,
+        actions::systems::{handle_buy_action, handle_waiting_interaction_timed_out},
         tasks::systems::{handle_buy_task, handle_buying_failed},
     },
     GameState,
@@ -20,6 +20,7 @@ impl Plugin for BuyPlugin {
             Update,
             (handle_buy_task, handle_buy_action).run_if(in_state(GameState::Running)),
         )
-        .add_observer(handle_buying_failed);
+        .add_observer(handle_buying_failed)
+        .add_observer(handle_waiting_interaction_timed_out);
     }
 }

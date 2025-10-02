@@ -1,4 +1,7 @@
-use bevy::{ecs::component::Component, math::Vec3};
+use bevy::{
+    ecs::{component::Component, entity::Entity},
+    math::Vec3,
+};
 use rand::random;
 
 pub trait ActionMarker {
@@ -11,6 +14,11 @@ pub trait DurationAction {
     fn progress(&mut self, time: f32);
 }
 
+pub trait TimeoutAction {
+    fn set_timed_out(&mut self);
+    fn is_timed_out(&self) -> bool;
+}
+
 #[derive(Component, Default)]
 pub struct Idle;
 
@@ -20,7 +28,7 @@ pub type InteractionId = u32;
 pub struct Interacting {
     pub id: InteractionId,
     resting_duration: f32,
-    timed_out: bool
+    timed_out: bool,
 }
 
 impl Interacting {
@@ -34,12 +42,14 @@ impl Interacting {
             ..Default::default()
         }
     }
+}
 
-    pub fn set_timed_out(&mut self) {
+impl TimeoutAction for Interacting {
+    fn set_timed_out(&mut self) {
         self.timed_out = true;
     }
 
-    pub fn is_timed_out(&self) -> bool {
+    fn is_timed_out(&self) -> bool {
         self.timed_out
     }
 }
@@ -58,7 +68,7 @@ impl Default for Interacting {
         Self {
             id: random(),
             resting_duration: 10.,
-            timed_out: false
+            timed_out: false,
         }
     }
 }
@@ -66,28 +76,41 @@ impl Default for Interacting {
 #[derive(Component, Debug)]
 pub struct WaitingInteraction {
     resting_duration: f32,
+    timed_out: bool,
     pub id: InteractionId,
-}
-
-impl Default for WaitingInteraction {
-    fn default() -> Self {
-        Self {
-            id: random(),
-            resting_duration: 5.,
-        }
-    }
+    pub source: Entity,
+    pub target: Entity,
 }
 
 impl WaitingInteraction {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(source: Entity, target: Entity) -> Self {
+        Self {
+            id: random(),
+            resting_duration: 5.,
+            source,
+            target,
+            timed_out: false
+        }
     }
 
-    pub fn new_with(resting_duration: f32) -> Self {
+    pub fn new_with_duration(source: Entity, target: Entity, resting_duration: f32) -> Self {
         Self {
+            id: random(),
             resting_duration,
-            ..Default::default()
+            target,
+            source,
+            timed_out: false
         }
+    }
+}
+
+impl TimeoutAction for WaitingInteraction {
+    fn set_timed_out(&mut self) {
+        self.timed_out = true;
+    }
+
+    fn is_timed_out(&self) -> bool {
+        self.timed_out
     }
 }
 

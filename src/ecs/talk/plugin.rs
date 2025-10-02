@@ -20,12 +20,12 @@ impl Plugin for TalkPlugin {
                 Update,
                 (
                     handle_added_talk_task,
-                    handle_waiting_while_talk_task,
                     handle_get_close_to_target_while_talk_task,
                 )
                     .run_if(in_state(GameState::Running)),
             )
             .add_observer(handle_talk_failure)
-            .add_observer(handle_talk_success);
+            .add_observer(handle_talk_success)
+            .add_observer(handle_waiting_interaction_timed_out);
     }
 }
