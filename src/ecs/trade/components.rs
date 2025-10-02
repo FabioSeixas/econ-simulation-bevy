@@ -16,14 +16,14 @@ pub struct TradeNegotiation {
 
 #[derive(Bundle, Debug)]
 pub struct TradeInteraction {
-    interacting: Interacting, // TODO: use #[require(Interacting)]
+    interacting: Interacting, 
     pub trade: TradeNegotiation,
 }
 
 impl TradeInteraction {
-    pub fn new(trade: TradeNegotiation, interaction_id: InteractionId) -> Self {
+    pub fn new(trade: TradeNegotiation, interaction_id: InteractionId, source: Entity, target: Entity) -> Self {
         Self {
-            interacting: Interacting::new_with_id(interaction_id),
+            interacting: Interacting::new_with_id(interaction_id, source, target),
             trade,
         }
     }

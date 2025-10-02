@@ -222,11 +222,19 @@ pub fn agent_ui_panel_system(
             ui.label("CURRENT Interaction:");
             if let Ok((interacting, waiting_interaction)) = interaction_query.get(selected_entity) {
                 if let Some(v) = interacting {
-                    ui.label(format!("Interacting {} {:.1}", v.id, v.get_resting_duration()));
+                    ui.label(format!(
+                        "Interacting {} {:.1}",
+                        v.id,
+                        v.get_resting_duration()
+                    ));
                 }
 
                 if let Some(w) = waiting_interaction {
-                    ui.label(format!("Waiting Interaction {} {:.1}", w.id, w.get_resting_duration()));
+                    ui.label(format!(
+                        "Waiting Interaction {} {:.1}",
+                        w.id,
+                        w.get_resting_duration()
+                    ));
                     if ui.button("Select partner").clicked() {
                         if w.target == selected_entity {
                             commands.trigger(ChangeSelectedEntity { target: w.source });
@@ -281,6 +289,9 @@ pub fn agent_ui_panel_system(
             // --- Display Interaction Queue ---
             ui.label("INTERACTION QUEUE:");
             ui.label(format!("Current size: {:?}", interaction_queue.len()));
+            for interaction_item in interaction_queue.list() {
+                ui.label(format!("ID: {:?}", interaction_item.id));
+            }
             ui.separator();
 
             egui::ScrollArea::vertical()

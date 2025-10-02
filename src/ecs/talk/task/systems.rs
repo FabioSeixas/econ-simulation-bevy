@@ -150,13 +150,24 @@ pub fn handle_waiting_interaction_timed_out(
 }
 
 pub fn handle_get_close_to_target_while_talk_task(
-    source_agent_query: Query<(Entity, &Transform, &TalkTask), Without<Walking>>,
+    source_agent_query: Query<
+        (Entity, &Transform, &TalkTask, Option<&Interacting>),
+        Without<Walking>,
+    >,
     target_agent_query: Query<(Entity, &Transform), With<Agent>>,
     mut add_log_writer: EventWriter<AddLogEntry>,
     mut commands: Commands,
 ) {
-    for (source_entity, source_transform, talk_task) in &source_agent_query {
-        if let Some((_, target_entity, target_name)) = talk_task.current_interaction.as_ref() {
+    for (source_entity, source_transform, talk_task, maybe_interacting) in &source_agent_query {
+        if let Some((current_interaction_id, target_entity, target_name)) =
+            talk_task.current_interaction.as_ref()
+        {
+            if let Some(interacting) = maybe_interacting {
+                if interacting.id != *current_interaction_id {
+                    continue;
+                }
+            }
+
             if let Ok((_, target_transform)) = target_agent_query.get(target_entity.clone()) {
                 if source_transform
                     .translation
@@ -165,7 +176,11 @@ pub fn handle_get_close_to_target_while_talk_task(
                 {
                     add_log_writer.send(AddLogEntry::new(
                         source_entity,
-                        format!("TalkTask -> Walking to target {}", target_name).as_str(),
+                        format!(
+                            "TalkTask -> Walking to target {}. Interaction ID {}",
+                            target_name, current_interaction_id
+                        )
+                        .as_str(),
                     ));
                     commands
                         .entity(source_entity)
@@ -202,8 +217,6 @@ pub fn handle_talk_failure(
         //     SystemTime::now().duration_since(UNIX_EPOCH).ok().unwrap(),
         //     task
         // );
-
-        add_log_writer.send(AddLogEntry::new(entity, "handle_talk_failure"));
 
         if let Some((id, partner, partner_name)) = task.current_interaction.take() {
             add_log_writer.send(AddLogEntry::new(

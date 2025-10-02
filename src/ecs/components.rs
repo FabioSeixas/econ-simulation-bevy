@@ -27,19 +27,20 @@ pub type InteractionId = u32;
 #[derive(Component, Debug)]
 pub struct Interacting {
     pub id: InteractionId,
+    pub source: Entity,
+    pub target: Entity,
     resting_duration: f32,
     timed_out: bool,
 }
 
 impl Interacting {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn new_with_id(id: InteractionId) -> Self {
+    pub fn new_with_id(id: InteractionId, source: Entity, target: Entity) -> Self {
         Self {
             id,
-            ..Default::default()
+            target,
+            source,
+            timed_out: false,
+            resting_duration: 10.
         }
     }
 }
@@ -60,16 +61,6 @@ impl DurationAction for Interacting {
     }
     fn progress(&mut self, time: f32) {
         self.resting_duration -= time;
-    }
-}
-
-impl Default for Interacting {
-    fn default() -> Self {
-        Self {
-            id: random(),
-            resting_duration: 10.,
-            timed_out: false,
-        }
     }
 }
 

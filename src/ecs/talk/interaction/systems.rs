@@ -1,5 +1,3 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use bevy::prelude::*;
 
 use crate::ecs::{
@@ -17,12 +15,17 @@ use crate::ecs::{
 };
 
 pub fn handle_knowlegde_share_requested_system(
-    mut query: Query<(Entity, &mut KnowledgeSharingInteraction, &Transform)>,
-    transform_query: Query<&Transform, (With<KnowledgeSharingInteraction>, With<Interacting>)>,
+    mut query: Query<(
+        Entity,
+        &mut KnowledgeSharingInteraction,
+        &Transform,
+        &Interacting,
+    )>,
+    source_query: Query<(&Transform, &Interacting), With<KnowledgeSharingInteraction>>,
     mut start_talk_writer: EventWriter<StartTalkEvent>,
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
-    for (entity, mut knowledge_sharing, entity_transform) in &mut query {
+    for (entity, mut knowledge_sharing, entity_transform, entity_interacting) in &mut query {
         let is_source = entity == knowledge_sharing.source;
         if is_source && knowledge_sharing.is_waiting_target() {
             add_log_writer.send(AddLogEntry::new(
@@ -38,8 +41,15 @@ pub fn handle_knowlegde_share_requested_system(
         } else if is_source {
             // skip if source
         } else if knowledge_sharing.is_waiting_target() {
-            // target: check if source is close
-            if let Ok(source_transform) = transform_query.get(knowledge_sharing.source) {
+            // target:
+            // check if source is ready (close and dealing with this particular interaction right now)
+            if let Ok((source_transform, source_interacting)) =
+                source_query.get(knowledge_sharing.source)
+            {
+                if source_interacting.id != entity_interacting.id {
+                    continue;
+                }
+
                 if source_transform
                     .translation
                     .distance(entity_transform.translation)
@@ -101,6 +111,7 @@ pub fn handle_knowlegde_share_started_system(
                 for (seller, knowledge_id) in target_known_sellers {
                     if !source_known_sellers.contains(&seller) {
                         send_knowledge_writer.send(SendKnowledgeEvent {
+                            interaction_id: interacting.id,
                             source: source_entity,
                             target: event.target,
                             knowledge_id,
@@ -114,16 +125,21 @@ pub fn handle_knowlegde_share_started_system(
 
                 if nothing_to_share {
                     share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
+                        interaction_id: interacting.id,
                         target: source_entity,
                         success: false,
                         should_trigger_feedback: true,
                     });
                     share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
+                        interaction_id: interacting.id,
                         target: event.target,
                         success: false,
                         should_trigger_feedback: false,
                     });
                 }
+            } else {
+                // TODO: finish interaction
+                println!("No source found: {}", interacting.id);
             }
         }
     }
@@ -148,12 +164,17 @@ pub fn handle_knowlegde_shared_system(
         {
             add_log_writer.send(AddLogEntry::new(
                 event.source,
-                format!("Received requested knowledge. ID {}", interacting.id).as_str(),
+                format!(
+                    "Received requested knowledge. Interaction ID {}",
+                    interacting.id
+                )
+                .as_str(),
             ));
 
             source_agent_knowledge.add(event.knowledge_id);
 
             share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
+                interaction_id: interacting.id,
                 target: event.source,
                 success: true,
                 should_trigger_feedback: true,
@@ -161,6 +182,7 @@ pub fn handle_knowlegde_shared_system(
         }
 
         share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
+            interaction_id: event.interaction_id,
             target: event.target,
             success: true,
             should_trigger_feedback: false,
@@ -177,18 +199,12 @@ pub fn share_knowledge_finalized_system(
         add_log_writer.send(AddLogEntry::new(
             event.target,
             format!(
-                "Finishing knowledge sharing with {}",
+                "Finishing Interaction {} - knowledge sharing with {}",
+                event.interaction_id,
                 if event.success { "SUCCESS" } else { "FAILURE" }
             )
             .as_str(),
         ));
-
-        println!(
-            "share_knowledge_finalized_system: {} at {:?} - {:?}",
-            event.target,
-            SystemTime::now().duration_since(UNIX_EPOCH).ok().unwrap(),
-            event
-        );
 
         commands
             .entity(event.target)
@@ -218,7 +234,11 @@ pub fn handle_interaction_timed_out(
         if trigger.id == interacting.id {
             add_log_writer.send(AddLogEntry::new(
                 entity,
-                "KnowledgeSharingInteraction -> Interaction timed out",
+                format!(
+                    "KnowledgeSharingInteraction -> Interaction {} timed out",
+                    interacting.id
+                )
+                .as_str(),
             ));
             commands
                 .entity(entity)

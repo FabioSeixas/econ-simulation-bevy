@@ -9,11 +9,15 @@ use crate::ecs::{
 
 #[derive(Event, Debug)]
 pub struct InteractionTimedOut {
+    // TODO: change to InteractionExit with reason enum (timeout,
+    // force quit etc)
     pub id: InteractionId,
 }
 
 #[derive(Event, Debug)]
 pub struct WaitingInteractionTimedOut {
+    // TODO: change to WaitingInteractionExit with reason enum (timeout,
+    // force quit etc)
     pub id: InteractionId,
     pub source: Entity,
     pub target: Entity,
@@ -21,41 +25,56 @@ pub struct WaitingInteractionTimedOut {
 
 #[derive(Component)]
 pub struct AgentInteractionQueue {
-    queue: VecDeque<AgentInteractionItem>,
+    received_as_target_queue: VecDeque<AgentInteractionItem>,
+    start_as_source: Option<AgentInteractionItem>,
 }
 
 impl AgentInteractionQueue {
     pub fn new() -> Self {
         Self {
-            queue: VecDeque::new(),
+            received_as_target_queue: VecDeque::new(),
+            start_as_source: None
         }
     }
 
+    // ====================
+    // Methods to handle interactions ready to start as Source
+    pub fn interaction_ready(&mut self, item: AgentInteractionItem) {
+        self.start_as_source = Some(item);
+    }
+
+    pub fn get_ready_interaction(&self) -> Option<&AgentInteractionItem> {
+        self.start_as_source.as_ref()
+    }
+
+    pub fn clean_ready_interaction(&mut self) {
+        self.start_as_source = None;
+    }
+
+    // ====================
+    // Methods to handle interactions as Target
     pub fn add(&mut self, item: AgentInteractionItem) {
-        self.queue.push_back(item);
+        self.received_as_target_queue.push_back(item);
     }
 
     pub fn rm_id(&mut self, rm_id: InteractionId) {
-        self.queue.retain(|event| event.id != rm_id);
+        self.received_as_target_queue.retain(|event| event.id != rm_id);
+    }
+
+    pub fn list(&self) -> impl Iterator<Item = &AgentInteractionItem> {
+        self.received_as_target_queue.iter()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.queue.is_empty()
+        self.received_as_target_queue.is_empty()
     }
 
     pub fn len(&self) -> usize {
-        self.queue.len()
-    }
-
-    pub fn get_first(&mut self) -> Option<&AgentInteractionItem> {
-        match self.queue.front() {
-            None => None,
-            Some(v) => Some(v),
-        }
+        self.received_as_target_queue.len()
     }
 
     pub fn pop_first(&mut self) -> Option<AgentInteractionItem> {
-        match self.queue.pop_front() {
+        match self.received_as_target_queue.pop_front() {
             None => None,
             Some(v) => Some(v),
         }
