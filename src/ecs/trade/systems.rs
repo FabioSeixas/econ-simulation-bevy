@@ -13,6 +13,8 @@ use crate::{
 pub fn seller_makes_offer_system(
     mut seller_query: Query<
         (Entity, &Agent, &mut TradeNegotiation),
+        // TODO: this can lead to problems since the Buyer won't be immediatelly ready 
+        // to anser the seller offer through OfferMade event
         (With<Selling>, Added<TradeNegotiation>, With<Interacting>),
     >,
     mut offer_made_writer: EventWriter<OfferMade>,
