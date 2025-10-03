@@ -9,35 +9,22 @@ use crate::ecs::sell::actions::components::Selling;
 use crate::ecs::trade::components::*;
 
 pub fn handle_buy_action(
-    mut query: Query<
-        (Entity, &mut Buying, Option<&WaitingInteraction>),
-        Without<Interacting>, // (With<Buying>, Without<Idle>, Without<Interacting>),
-    >,
+    mut query: Query<(Entity, &mut Buying), (Without<Interacting>, Without<WaitingInteraction>)>,
     mut query_seller: Query<&mut AgentInteractionQueue, With<Selling>>,
     mut add_log_writer: EventWriter<AddLogEntry>,
     mut commands: Commands,
 ) {
-    // TODO: use new interaction start flow
-    for (buyer, mut buying, waiting_interaction) in &mut query {
-        if let Some(_) = waiting_interaction {
-            // nothing
-        } else if let Ok(mut seller_agent_interaction_queue) = query_seller.get_mut(buying.seller) {
+    for (buyer, mut buying) in &mut query {
+        if let Ok(mut seller_agent_interaction_queue) = query_seller.get_mut(buying.seller) {
             add_log_writer.send(AddLogEntry::new(
                 buyer,
                 "Seller found, adding TradeNegotiation to the seller queue",
             ));
-            let buyer_trade_marker = TradeNegotiation {
-                role: TradeRole::Buyer,
-                quantity: buying.qty,
-                item: buying.item,
-                price: None,
-                partner: buying.seller.clone(),
-            };
 
             let waiting = WaitingInteraction::new(buyer, buying.seller);
             let interaction_id = waiting.id;
 
-            commands.entity(buyer).insert((buyer_trade_marker, waiting));
+            commands.entity(buyer).insert(waiting);
 
             let seller_trade_marker = TradeNegotiation {
                 role: TradeRole::Seller,
@@ -88,7 +75,7 @@ pub fn handle_waiting_interaction_timed_out(
                 .remove::<(WaitingInteraction, Buying)>()
                 .trigger(BuyingFailed {
                     target: trigger.source, // buyer
-                    seller: trigger.target  // seller
+                    seller: trigger.target, // seller
                 });
         }
     }

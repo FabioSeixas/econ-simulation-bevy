@@ -34,7 +34,11 @@ impl AgentLogs {
             description: description.clone(),
             time: SystemTime::now().duration_since(UNIX_EPOCH).ok().unwrap(),
             frame
-        })
+        });
+
+        if self.logs.len() > 100 && self.logs.len() % 100 == 0 {
+            self.logs.drain(0..100);
+        }
     }
 
     pub fn list(&self) -> &Vec<LogEntry> {

@@ -259,9 +259,9 @@ fn wait_finish_interaction_to_start_new_interaction_as_source_system(
 
             add_log_writer.send(
                 AddLogEntry::new(
-                    trigger.entity(), 
+                    trigger.entity(),
                     format!(
-                        "OnRemove<Interacting> -> Triggered SourceStartInteraction event for interaction: {}", 
+                        "OnRemove<Interacting> -> Triggered SourceStartInteraction event for interaction: {}",
                         ready_interaction.id
                     ).as_str()));
 
@@ -284,18 +284,17 @@ fn start_interaction_as_source_system(
                 panic!("waiting.id != ready_interaction.id should not happen")
             }
 
+            add_log_writer.send(AddLogEntry::new(
+                trigger.target,
+                format!(
+                    "Remove WaitingInteraction and starting Interacting. Id: {}",
+                    ready_interaction.id
+                )
+                .as_str(),
+            ));
+
             match &ready_interaction.kind {
                 AgentInteractionKind::Ask(sharing) => {
-                    add_log_writer.send(AddLogEntry::new(
-                            sharing.source,
-                        format!(
-                            "Remove WaitingInteraction and starting Interacting. source {}. target: {}. Id: {}",
-                            sharing.source_name,
-                            sharing.target_name,
-                            ready_interaction.id
-                            ).as_str()
-                    ));
-
                     commands
                         .entity(sharing.source)
                         .insert((
@@ -308,7 +307,21 @@ fn start_interaction_as_source_system(
                         ))
                         .remove::<WaitingInteraction>();
                 }
-                _ => todo!(),
+                AgentInteractionKind::Trade(trade_negotiation) => {
+                    let interaction = Interacting::new_with_id(
+                        ready_interaction.id,
+                        trade_negotiation.partner,
+                        waiting.target,
+                    );
+
+                    commands
+                        .entity(trade_negotiation.partner)
+                        .insert((
+                            interaction,
+                            trade_negotiation.clone_for_source(waiting.target),
+                        ))
+                        .remove::<WaitingInteraction>();
+                }
             }
 
             agent_queue.clean_ready_interaction();
@@ -318,20 +331,12 @@ fn start_interaction_as_source_system(
 
 // USED FOR THE TARGET
 fn check_agent_interaction_queue_system(
-    mut query: Query<
-        (
-            Entity,
-            &Name,
-            &mut AgentInteractionQueue,
-            // Option<&WaitingInteraction>,
-        ),
-        Without<Interacting>,
-    >,
+    mut query: Query<(Entity, &mut AgentInteractionQueue), Without<Interacting>>,
     mut commands: Commands,
     mut add_log_writer: EventWriter<AddLogEntry>,
     mut interaction_started_writer: EventWriter<InteractionStarted>,
 ) {
-    for (target_entity, target_name, mut agent_interation_queue) in &mut query {
+    for (target_entity, mut agent_interation_queue) in &mut query {
         if !agent_interation_queue.is_empty() {
             let mut maybe_trigger_for_entity: Option<Entity> = None;
 
@@ -360,23 +365,15 @@ fn check_agent_interaction_queue_system(
                     AgentInteractionKind::Trade(trade_negotiation) => {
                         add_log_writer.send(AddLogEntry::new(
                             target_entity,
-                            format!("Start Trade Interaction with {}", trade_negotiation.partner)
-                                .as_str(),
-                        ));
-                        add_log_writer.send(AddLogEntry::new(
-                            trade_negotiation.partner,
-                            format!("Start Trade Interaction with {}", target_name).as_str(),
+                            format!(
+                                "Received Trade Interaction with {}",
+                                trade_negotiation.partner
+                            )
+                            .as_str(),
                         ));
 
-                        // TODO: use interaction started event
-                        commands
-                            .entity(trade_negotiation.partner)
-                            .insert(Interacting::new_with_id(
-                                interaction_item.id,
-                                trade_negotiation.partner,
-                                target_entity,
-                            ))
-                            .remove::<WaitingInteraction>();
+                        // partner here is the source
+                        maybe_trigger_for_entity = Some(trade_negotiation.partner);
 
                         commands.entity(target_entity).insert(TradeInteraction::new(
                             trade_negotiation.clone(),
@@ -395,7 +392,6 @@ fn check_agent_interaction_queue_system(
                 }
 
                 // this will start only ONE interaction by frame
-                // and avoid the same agent start two interactions in the same frame
                 break;
             }
         }
