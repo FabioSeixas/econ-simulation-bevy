@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod traits;
 pub mod interaction;
+pub mod game_state;
 pub mod trade;
 pub mod components;
 pub mod ui;

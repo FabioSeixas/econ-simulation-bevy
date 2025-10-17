@@ -2,7 +2,8 @@ use bevy::prelude::*;
 
 use crate::ecs::agent::Agent;
 use crate::ecs::components::*;
-use crate::ecs::interaction::*;
+use crate::ecs::interaction::common::components::{AgentInteractionItem, AgentInteractionKind, AgentInteractionQueue};
+use crate::ecs::interaction::common::events::WaitingInteractionTimedOut;
 use crate::ecs::logs::*;
 use crate::ecs::talk::events::*;
 use crate::ecs::talk::interaction::components::KnowledgeSharingInteraction;

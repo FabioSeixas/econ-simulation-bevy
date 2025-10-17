@@ -1,27 +1,11 @@
 use std::collections::VecDeque;
 
-use bevy::ecs::{component::Component, entity::Entity, event::Event};
+use bevy::ecs::component::Component;
 
 use crate::ecs::{
     components::InteractionId, talk::interaction::components::KnowledgeSharingInteraction,
     trade::components::TradeNegotiation,
 };
-
-#[derive(Event, Debug)]
-pub struct InteractionTimedOut {
-    // TODO: change to InteractionExit with reason enum (timeout,
-    // force quit etc)
-    pub id: InteractionId,
-}
-
-#[derive(Event, Debug)]
-pub struct WaitingInteractionTimedOut {
-    // TODO: change to WaitingInteractionExit with reason enum (timeout,
-    // force quit etc)
-    pub id: InteractionId,
-    pub source: Entity,
-    pub target: Entity,
-}
 
 #[derive(Component)]
 pub struct AgentInteractionQueue {
@@ -33,7 +17,7 @@ impl AgentInteractionQueue {
     pub fn new() -> Self {
         Self {
             received_as_target_queue: VecDeque::new(),
-            start_as_source: None
+            start_as_source: None,
         }
     }
 
@@ -58,7 +42,8 @@ impl AgentInteractionQueue {
     }
 
     pub fn rm_id(&mut self, rm_id: InteractionId) {
-        self.received_as_target_queue.retain(|event| event.id != rm_id);
+        self.received_as_target_queue
+            .retain(|event| event.id != rm_id);
     }
 
     pub fn list(&self) -> impl Iterator<Item = &AgentInteractionItem> {

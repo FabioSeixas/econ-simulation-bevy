@@ -3,18 +3,24 @@ use bevy::prelude::*;
 use crate::{
     core::item::ItemEnum,
     ecs::{
-        agent::Agent, buy::{actions::components::Buying, tasks::components::BuyTask}, components::{Idle, Interacting}, interaction::InteractionTimedOut, logs::AddLogEntry, sell::actions::components::Selling, trade::{
+        agent::Agent,
+        buy::{actions::components::Buying, tasks::components::BuyTask},
+        components::{Idle, Interacting},
+        interaction::common::events::InteractionTimedOut,
+        logs::AddLogEntry,
+        sell::actions::components::Selling,
+        trade::{
             components::{TradeInteraction, TradeNegotiation, TradeRole},
             events::{OfferAgreed, OfferMade, TradeFinalized},
-        }
+        },
     },
 };
 
 pub fn seller_makes_offer_system(
     mut seller_query: Query<
         (Entity, &Agent, &mut TradeNegotiation),
-        // TODO: this can lead to problems since the Buyer won't be immediatelly ready 
-        // to anser the seller offer through OfferMade event
+        // TODO: this can lead to problems since the Buyer won't be immediatelly ready
+        // to answer the seller offer through OfferMade event
         (With<Selling>, Added<TradeNegotiation>, With<Interacting>),
     >,
     mut offer_made_writer: EventWriter<OfferMade>,

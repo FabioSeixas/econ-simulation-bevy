@@ -12,7 +12,11 @@ use crate::ecs::buy::tasks::components::BuyTask;
 use crate::ecs::components::*;
 use crate::ecs::consume::plugin::ConsumePlugin;
 use crate::ecs::consume::tasks::components::ConsumeTask;
-use crate::ecs::interaction::*;
+use crate::ecs::game_state::*;
+use crate::ecs::interaction::{
+    common::{components::*, events::*},
+    plugin::*,
+};
 use crate::ecs::knowledge::KnowledgePlugin;
 use crate::ecs::knowledge::SharedKnowledge;
 use crate::ecs::logs::*;
@@ -21,17 +25,9 @@ use crate::ecs::roles::plugin::RolesPlugin;
 use crate::ecs::roles::seller::SellerRole;
 use crate::ecs::sell::plugin::SellPlugin;
 use crate::ecs::talk::plugin::TalkPlugin;
-use crate::ecs::trade::components::*;
 use crate::ecs::trade::plugin::TradePlugin;
 use crate::ecs::ui::plugin::UiPlugin;
 use crate::ecs::utils::get_random_vec3;
-
-#[derive(States, Clone, Eq, PartialEq, Debug, Hash, Default)]
-enum GameState {
-    #[default]
-    Running,
-    Paused,
-}
 
 fn toggle_pause(
     keys: Res<ButtonInput<KeyCode>>,
@@ -55,9 +51,8 @@ fn main() {
         }))
         .init_state::<GameState>()
         .add_event::<AddLogEntry>()
-        .add_event::<InteractionStarted>()
-        .add_event::<InteractionTimedOut>()
         .add_plugins(TradePlugin)
+        .add_plugins(BaseInteractionPlugin)
         .add_plugins(TalkPlugin)
         .add_plugins(ConsumePlugin)
         .add_plugins(KnowledgePlugin)
@@ -68,21 +63,7 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(
             First,
-            (
-                update_agents,
-                check_idle_agents_needs,
-                interaction_timeout_system,
-                waiting_interaction_timeout_system,
-            )
-                .chain()
-                .run_if(in_state(GameState::Running)),
-        )
-        .add_systems(
-            PreUpdate,
-            (
-                check_agent_interaction_queue_system,
-                receive_interaction_started_system,
-            )
+            (update_agents, check_idle_agents_needs)
                 .chain()
                 .run_if(in_state(GameState::Running)),
         )
@@ -92,10 +73,6 @@ fn main() {
         )
         .add_systems(PostUpdate, add_logs_system)
         .add_systems(Last, toggle_pause)
-        .add_observer(remove_timed_out_interaction_from_agent_queue)
-        .add_observer(remove_timed_out_waiting_interaction_from_agent_queue)
-        .add_observer(start_interaction_as_source_system)
-        .add_observer(wait_finish_interaction_to_start_new_interaction_as_source_system)
         .run();
 }
 
@@ -114,287 +91,6 @@ pub fn add_logs_system(
 fn update_agents(mut query: Query<&mut Agent>) {
     for mut agent in &mut query {
         agent.frame_update();
-    }
-}
-
-#[derive(Event, Debug)]
-pub struct InteractionStarted {
-    pub target: Entity,
-    pub item: AgentInteractionItem,
-}
-
-fn interaction_timeout_system(
-    mut query: Query<&mut Interacting>,
-    mut command: Commands,
-    time: Res<Time>,
-) {
-    for mut interacting in &mut query {
-        if interacting.get_resting_duration() > 0. {
-            interacting.progress(time.delta_secs());
-        } else if interacting.is_timed_out() {
-            // nothing
-        } else {
-            interacting.set_timed_out();
-            command.trigger(InteractionTimedOut { id: interacting.id });
-        }
-    }
-}
-
-fn waiting_interaction_timeout_system(
-    mut query: Query<&mut WaitingInteraction>,
-    mut command: Commands,
-    time: Res<Time>,
-) {
-    for mut waiting in &mut query {
-        if waiting.get_resting_duration() > 0. {
-            waiting.progress(time.delta_secs());
-        } else if waiting.is_timed_out() {
-            // nothing
-        } else {
-            waiting.set_timed_out();
-            command.trigger(WaitingInteractionTimedOut {
-                id: waiting.id,
-                source: waiting.source,
-                target: waiting.target,
-            });
-        }
-    }
-}
-
-fn remove_timed_out_interaction_from_agent_queue(
-    trigger: Trigger<InteractionTimedOut>,
-    mut query: Query<(&mut AgentInteractionQueue, &Interacting)>,
-) {
-    for (mut agent_interation_queue, _) in &mut query {
-        if !agent_interation_queue.is_empty() {
-            agent_interation_queue.rm_id(trigger.id);
-        }
-    }
-}
-
-fn remove_timed_out_waiting_interaction_from_agent_queue(
-    trigger: Trigger<WaitingInteractionTimedOut>,
-    mut query: Query<&mut AgentInteractionQueue>,
-) {
-    if let Ok(mut agent_interation_queue) = query.get_mut(trigger.source) {
-        if !agent_interation_queue.is_empty() {
-            agent_interation_queue.rm_id(trigger.id);
-        }
-    }
-    if let Ok(mut agent_interation_queue) = query.get_mut(trigger.target) {
-        if !agent_interation_queue.is_empty() {
-            agent_interation_queue.rm_id(trigger.id);
-        }
-    }
-}
-
-// USED FOR THE SOURCE
-#[derive(Event, Debug)]
-pub struct SourceStartInteraction {
-    pub target: Entity,
-}
-
-fn receive_interaction_started_system(
-    mut query: Query<(
-        &WaitingInteraction,
-        &mut AgentInteractionQueue,
-        Option<&Interacting>,
-    )>,
-    mut add_log_writer: EventWriter<AddLogEntry>,
-    mut interaction_started_reader: EventReader<InteractionStarted>,
-    mut commands: Commands,
-) {
-    for event in interaction_started_reader.read() {
-        if let Ok((waiting, mut agent_queue, maybe_interacting)) = query.get_mut(event.target) {
-            add_log_writer.send(AddLogEntry::new(
-                event.target,
-                format!(
-                    "Received InteractionStarted event Id: {}. WaitingInteraction ID {}",
-                    event.item.id, waiting.id
-                )
-                .as_str(),
-            ));
-
-            if waiting.id != event.item.id {
-                commands.trigger(InteractionTimedOut { id: event.item.id });
-                continue;
-            }
-
-            agent_queue.interaction_ready(event.item.clone());
-
-            if maybe_interacting.is_none() {
-                add_log_writer.send(AddLogEntry::new(
-                    event.target,
-                    format!(
-                        "Triggered SourceStartInteraction event for interaction: {}",
-                        event.item.id
-                    )
-                    .as_str(),
-                ));
-
-                commands.trigger(SourceStartInteraction {
-                    target: event.target,
-                });
-            } else {
-                add_log_writer.send(AddLogEntry::new(
-                    event.target,
-                    format!("Currently interacting {}", maybe_interacting.unwrap().id).as_str(),
-                ));
-            }
-        }
-    }
-}
-
-fn wait_finish_interaction_to_start_new_interaction_as_source_system(
-    trigger: Trigger<OnRemove, Interacting>,
-    query: Query<(&WaitingInteraction, &AgentInteractionQueue)>,
-    mut add_log_writer: EventWriter<AddLogEntry>,
-    mut commands: Commands,
-) {
-    if let Ok((waiting, agent_queue)) = query.get(trigger.entity()) {
-        if let Some(ready_interaction) = agent_queue.get_ready_interaction() {
-            if waiting.id != ready_interaction.id {
-                panic!("waiting.id != ready_interaction.id should not happen")
-            }
-
-            add_log_writer.send(
-                AddLogEntry::new(
-                    trigger.entity(),
-                    format!(
-                        "OnRemove<Interacting> -> Triggered SourceStartInteraction event for interaction: {}",
-                        ready_interaction.id
-                    ).as_str()));
-
-            commands.trigger(SourceStartInteraction {
-                target: trigger.entity(),
-            });
-        }
-    }
-}
-
-fn start_interaction_as_source_system(
-    trigger: Trigger<SourceStartInteraction>,
-    mut query: Query<(&WaitingInteraction, &mut AgentInteractionQueue)>,
-    mut add_log_writer: EventWriter<AddLogEntry>,
-    mut commands: Commands,
-) {
-    if let Ok((waiting, mut agent_queue)) = query.get_mut(trigger.target) {
-        if let Some(ready_interaction) = agent_queue.get_ready_interaction() {
-            if waiting.id != ready_interaction.id {
-                panic!("waiting.id != ready_interaction.id should not happen")
-            }
-
-            add_log_writer.send(AddLogEntry::new(
-                trigger.target,
-                format!(
-                    "Remove WaitingInteraction and starting Interacting. Id: {}",
-                    ready_interaction.id
-                )
-                .as_str(),
-            ));
-
-            match &ready_interaction.kind {
-                AgentInteractionKind::Ask(sharing) => {
-                    commands
-                        .entity(sharing.source)
-                        .insert((
-                            sharing.clone(),
-                            Interacting::new_with_id(
-                                ready_interaction.id,
-                                sharing.source,
-                                sharing.target,
-                            ),
-                        ))
-                        .remove::<WaitingInteraction>();
-                }
-                AgentInteractionKind::Trade(trade_negotiation) => {
-                    let interaction = Interacting::new_with_id(
-                        ready_interaction.id,
-                        trade_negotiation.partner,
-                        waiting.target,
-                    );
-
-                    commands
-                        .entity(trade_negotiation.partner)
-                        .insert((
-                            interaction,
-                            trade_negotiation.clone_for_source(waiting.target),
-                        ))
-                        .remove::<WaitingInteraction>();
-                }
-            }
-
-            agent_queue.clean_ready_interaction();
-        }
-    }
-}
-
-// USED FOR THE TARGET
-fn check_agent_interaction_queue_system(
-    mut query: Query<(Entity, &mut AgentInteractionQueue), Without<Interacting>>,
-    mut commands: Commands,
-    mut add_log_writer: EventWriter<AddLogEntry>,
-    mut interaction_started_writer: EventWriter<InteractionStarted>,
-) {
-    for (target_entity, mut agent_interation_queue) in &mut query {
-        if !agent_interation_queue.is_empty() {
-            let mut maybe_trigger_for_entity: Option<Entity> = None;
-
-            if let Some(interaction_item) = agent_interation_queue.pop_first() {
-                match &interaction_item.kind {
-                    AgentInteractionKind::Ask(sharing) => {
-                        add_log_writer.send(AddLogEntry::new(
-                            target_entity,
-                            format!(
-                                "Received Ask Interaction. source {}. target: {}. Id: {}",
-                                sharing.source_name, sharing.target_name, interaction_item.id
-                            )
-                            .as_str(),
-                        ));
-
-                        maybe_trigger_for_entity = Some(sharing.source);
-                        commands.entity(target_entity).insert((
-                            sharing.clone(),
-                            Interacting::new_with_id(
-                                interaction_item.id,
-                                sharing.source,
-                                sharing.target,
-                            ),
-                        ));
-                    }
-                    AgentInteractionKind::Trade(trade_negotiation) => {
-                        add_log_writer.send(AddLogEntry::new(
-                            target_entity,
-                            format!(
-                                "Received Trade Interaction with {}",
-                                trade_negotiation.partner
-                            )
-                            .as_str(),
-                        ));
-
-                        // partner here is the source
-                        maybe_trigger_for_entity = Some(trade_negotiation.partner);
-
-                        commands.entity(target_entity).insert(TradeInteraction::new(
-                            trade_negotiation.clone(),
-                            interaction_item.id,
-                            trade_negotiation.partner,
-                            target_entity,
-                        ));
-                    }
-                };
-
-                if let Some(source_entity) = maybe_trigger_for_entity {
-                    interaction_started_writer.send(InteractionStarted {
-                        item: interaction_item,
-                        target: source_entity,
-                    });
-                }
-
-                // this will start only ONE interaction by frame
-                break;
-            }
-        }
     }
 }
 
@@ -507,7 +203,7 @@ fn setup(
         });
     }
 
-    for i in 0..150 {
+    for i in 0..10 {
         let entity_id = commands.spawn_empty().id();
 
         commands.entity(entity_id).insert((

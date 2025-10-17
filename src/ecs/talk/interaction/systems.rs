@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::ecs::{
     components::Interacting,
-    interaction::InteractionTimedOut,
+    interaction::common::events::InteractionTimedOut,
     knowledge::AgentKnowledge,
     logs::AddLogEntry,
     talk::{
