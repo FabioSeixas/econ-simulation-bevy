@@ -14,64 +14,24 @@ use crate::ecs::{
     },
 };
 
-// TODO: make this system a generic system for starting every single interaction
 pub fn handle_knowlegde_share_requested_system(
-    mut query: Query<(
-        Entity,
-        &mut KnowledgeSharingInteraction,
-        &Transform,
-        &Interacting,
-    )>,
-    source_query: Query<(&Transform, &Interacting), With<KnowledgeSharingInteraction>>,
+    query: Query<(Entity, &KnowledgeSharingInteraction, &Interacting)>,
     mut start_talk_writer: EventWriter<StartTalkEvent>,
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
-    for (entity, mut knowledge_sharing, entity_transform, entity_interacting) in &mut query {
-        let is_source = entity == knowledge_sharing.source;
-        if is_source && knowledge_sharing.is_waiting_target() {
+    for (entity, knowledge_sharing, entity_interacting) in &query {
+        if entity == knowledge_sharing.target && entity_interacting.is_ready() {
             add_log_writer.send(AddLogEntry::new(
                 entity,
                 format!(
-                    "KnowledgeSharingInteraction -> Start with {}",
-                    knowledge_sharing.target_name
+                    "KnowledgeSharingInteraction {} -> Sending StartTalkEvent",
+                    entity_interacting.id
                 )
                 .as_str(),
             ));
-            // start the interaction for the source
-            knowledge_sharing.start();
-        } else if is_source {
-            // skip if source
-        } else if knowledge_sharing.is_waiting_target() {
-            // target:
-            // check if source is ready (close and dealing with this particular interaction right now)
-            if let Ok((source_transform, source_interacting)) =
-                source_query.get(knowledge_sharing.source)
-            {
-                if source_interacting.id != entity_interacting.id {
-                    continue;
-                }
-
-                if source_transform
-                    .translation
-                    .distance(entity_transform.translation)
-                    <= 50.
-                {
-                    add_log_writer.send(AddLogEntry::new(
-                        entity,
-                        format!(
-                            "KnowledgeSharingInteraction -> Start with {}",
-                            knowledge_sharing.source_name
-                        )
-                        .as_str(),
-                    ));
-
-                    // start the interaction for the target
-                    knowledge_sharing.start();
-                    start_talk_writer.send(StartTalkEvent {
-                        target: knowledge_sharing.target,
-                    });
-                }
-            }
+            start_talk_writer.send(StartTalkEvent {
+                target: knowledge_sharing.target,
+            });
         }
     }
 }

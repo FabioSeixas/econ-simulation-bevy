@@ -16,6 +16,7 @@ impl Plugin for BaseInteractionPlugin {
             .add_observer(wait_finish_interaction_to_start_new_interaction_as_source_system)
             .add_observer(remove_timed_out_interaction_from_agent_queue)
             .add_observer(remove_timed_out_waiting_interaction_from_agent_queue)
+            .add_observer(target_is_ready_to_start_interacting)
             .add_systems(
                 First,
                 (
@@ -32,6 +33,14 @@ impl Plugin for BaseInteractionPlugin {
                     receive_interaction_started_system,
                 )
                     .chain()
+                    .run_if(in_state(GameState::Running)),
+            )
+            .add_systems(
+                Update,
+                (
+                    handle_interaction_starting_for_source_system,
+                    handle_interaction_starting_for_target_system,
+                )
                     .run_if(in_state(GameState::Running)),
             );
     }

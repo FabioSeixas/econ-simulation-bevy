@@ -31,6 +31,14 @@ pub struct Interacting {
     pub target: Entity,
     resting_duration: f32,
     timed_out: bool,
+    status: InteractingStatusEnum,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InteractingStatusEnum {
+    #[default]
+    Waiting,
+    Ready,
 }
 
 impl Interacting {
@@ -40,8 +48,21 @@ impl Interacting {
             target,
             source,
             timed_out: false,
-            resting_duration: 10.
+            resting_duration: 10.,
+            status: InteractingStatusEnum::Waiting
         }
+    }
+
+    pub fn is_waiting(&self) -> bool {
+        self.status == InteractingStatusEnum::Waiting
+    }
+
+    pub fn is_ready(&self) -> bool {
+        self.status == InteractingStatusEnum::Ready
+    }
+
+    pub fn set_ready(&mut self) {
+        self.status = InteractingStatusEnum::Ready
     }
 }
 

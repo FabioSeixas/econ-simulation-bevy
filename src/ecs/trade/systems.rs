@@ -18,15 +18,19 @@ use crate::{
 
 pub fn seller_makes_offer_system(
     mut seller_query: Query<
-        (Entity, &Agent, &mut TradeNegotiation),
+        (Entity, &Agent, &mut TradeNegotiation, &Interacting),
         // TODO: this can lead to problems since the Buyer won't be immediatelly ready
         // to answer the seller offer through OfferMade event
-        (With<Selling>, Added<TradeNegotiation>, With<Interacting>),
+        With<Selling>,
     >,
     mut offer_made_writer: EventWriter<OfferMade>,
     mut trade_finalized_writer: EventWriter<TradeFinalized>,
 ) {
-    for (seller_entity, agent, mut trade) in &mut seller_query {
+    for (seller_entity, agent, mut trade, interacting) in &mut seller_query {
+        if interacting.is_waiting() {
+            continue;
+        }
+
         let seller_amount = agent.inventory.get_qty(trade.item);
 
         if seller_amount == 0 {
