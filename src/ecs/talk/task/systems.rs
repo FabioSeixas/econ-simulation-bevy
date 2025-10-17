@@ -2,7 +2,9 @@ use bevy::prelude::*;
 
 use crate::ecs::agent::Agent;
 use crate::ecs::components::*;
-use crate::ecs::interaction::common::components::{AgentInteractionItem, AgentInteractionKind, AgentInteractionQueue};
+use crate::ecs::interaction::common::components::{
+    AgentInteractionItem, AgentInteractionKind, AgentInteractionQueue,
+};
 use crate::ecs::interaction::common::events::WaitingInteractionTimedOut;
 use crate::ecs::logs::*;
 use crate::ecs::talk::events::*;
@@ -24,7 +26,7 @@ pub fn handle_added_talk_task(
             // although using TalkFinishedWithSuccess here,
             // this is a failure
             commands.trigger(TalkFinishedWithSuccess {
-                target: source_entity
+                source: source_entity,
             });
 
             continue;
@@ -120,7 +122,9 @@ pub fn handle_waiting_interaction_timed_out(
                 .entity(trigger.source)
                 .remove::<WaitingInteraction>()
                 .trigger(TalkFinishedWithFailure {
-                    target: trigger.source,
+                    source: trigger.source,
+                    target: trigger.target,
+                    interaction_id: waiting_interaction.id,
                 });
         }
     }
@@ -174,10 +178,12 @@ pub fn handle_talk_success(
     mut add_log_writer: EventWriter<AddLogEntry>,
     mut commands: Commands,
 ) {
-    let entity = trigger.target;
-    if let Ok(_) = agent_query.get(entity) {
-        add_log_writer.send(AddLogEntry::new(entity, "TalkTask -> Back to Idle"));
-        commands.entity(entity).insert(Idle).remove::<TalkTask>();
+    if let Ok(_) = agent_query.get(trigger.source) {
+        add_log_writer.send(AddLogEntry::new(trigger.source, "TalkTask -> Back to Idle"));
+        commands
+            .entity(trigger.source)
+            .insert(Idle)
+            .remove::<TalkTask>();
     }
 }
 
@@ -186,14 +192,13 @@ pub fn handle_talk_failure(
     mut add_log_writer: EventWriter<AddLogEntry>,
     mut agent_query: Query<&mut TalkTask>,
 ) {
-    let entity = trigger.target;
-    if let Ok(mut task) = agent_query.get_mut(entity) {
-        if let Some((id, partner, partner_name)) = task.current_interaction.take() {
+    if let Ok(mut task) = agent_query.get_mut(trigger.source) {
+        if let Some((current_interaction_id, partner, _)) = task.current_interaction.take() {
             add_log_writer.send(AddLogEntry::new(
-                entity,
+                trigger.source,
                 format!(
-                    "TalkTask -> interaction {} failed with {}, will try with another Agent",
-                    id, partner_name
+                    "TalkTask -> interaction {} failed. Will try with another Agent",
+                    current_interaction_id
                 )
                 .as_str(),
             ));

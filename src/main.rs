@@ -71,8 +71,7 @@ fn main() {
             Update,
             handle_walking_action.run_if(in_state(GameState::Running)),
         )
-        .add_systems(PostUpdate, add_logs_system)
-        .add_systems(Last, toggle_pause)
+        .add_systems(Last, (add_logs_system, toggle_pause).chain())
         .run();
 }
 
@@ -203,7 +202,7 @@ fn setup(
         });
     }
 
-    for i in 0..10 {
+    for i in 0..500 {
         let entity_id = commands.spawn_empty().id();
 
         commands.entity(entity_id).insert((

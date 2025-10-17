@@ -39,6 +39,7 @@ pub enum InteractingStatusEnum {
     #[default]
     Waiting,
     Ready,
+    Started,
 }
 
 impl Interacting {
@@ -63,6 +64,10 @@ impl Interacting {
 
     pub fn set_ready(&mut self) {
         self.status = InteractingStatusEnum::Ready
+    }
+
+    pub fn set_started(&mut self) {
+        self.status = InteractingStatusEnum::Started
     }
 }
 

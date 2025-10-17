@@ -99,6 +99,63 @@ pub fn target_is_ready_to_start_interacting(
     }
 }
 
+pub fn interaction_agents_move_on_system(
+    query: Query<(Entity, &Transform, &Interacting)>,
+    partner_query: Query<(&Transform, &Interacting)>,
+    mut add_log_writer: EventWriter<AddLogEntry>,
+    mut command: Commands,
+) {
+    for (entity, entity_transform, entity_interacting) in &query {
+        if entity_interacting.is_waiting() {
+            continue;
+        }
+
+        let partner = if entity_interacting.source == entity {
+            entity_interacting.target
+        } else {
+            entity_interacting.source
+        };
+
+        if let Ok((partner_transform, partner_interacting)) = &partner_query.get(partner) {
+            if partner_interacting.is_waiting() {
+                continue;
+            }
+
+            if partner_interacting.id != entity_interacting.id {
+                continue;
+            }
+
+            if partner_transform
+                .translation
+                .distance(entity_transform.translation)
+                > 500.
+            {
+                add_log_writer.send(AddLogEntry::new(
+                    entity,
+                    format!(
+                        "Partners are too far away to interact. Finishing this interaction {}",
+                        partner_interacting.id,
+                    )
+                    .as_str(),
+                ));
+
+                add_log_writer.send(AddLogEntry::new(
+                    partner,
+                    format!(
+                        "Partners are too far away to interact. Finishing this interaction {}",
+                        partner_interacting.id,
+                    )
+                    .as_str(),
+                ));
+
+                command.trigger(InteractionTimedOut {
+                    id: partner_interacting.id,
+                });
+            }
+        }
+    }
+}
+
 pub fn interaction_timeout_system(
     mut query: Query<&mut Interacting>,
     mut command: Commands,
@@ -152,14 +209,17 @@ pub fn remove_timed_out_waiting_interaction_from_agent_queue(
     trigger: Trigger<WaitingInteractionTimedOut>,
     mut query: Query<&mut AgentInteractionQueue>,
 ) {
-    if let Ok(mut agent_interation_queue) = query.get_mut(trigger.source) {
-        if !agent_interation_queue.is_empty() {
-            agent_interation_queue.rm_id(trigger.id);
-        }
-    }
+    // if let Ok(mut agent_interation_queue) = query.get_mut(trigger.source) {
+    //     if !agent_interation_queue.is_empty() {
+    //         agent_interation_queue.rm_id(trigger.id);
+    //     }
+    // }
     if let Ok(mut agent_interation_queue) = query.get_mut(trigger.target) {
         if !agent_interation_queue.is_empty() {
             agent_interation_queue.rm_id(trigger.id);
         }
+        // maybe we have to check if target started the interaction.
+        // If yes, the interaction won't exist in the queue and the target will be
+        // interacting until timeout.
     }
 }

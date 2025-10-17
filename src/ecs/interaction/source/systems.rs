@@ -8,58 +8,58 @@ use crate::{
             events::{InteractionStarted, InteractionTimedOut},
         },
         logs::AddLogEntry,
-        trade::components::TradeInteraction,
     },
     SourceStartInteraction,
 };
 
 pub fn receive_interaction_started_system(
+    trigger: Trigger<InteractionStarted>,
     mut query: Query<(
         &WaitingInteraction,
         &mut AgentInteractionQueue,
         Option<&Interacting>,
     )>,
     mut add_log_writer: EventWriter<AddLogEntry>,
-    mut interaction_started_reader: EventReader<InteractionStarted>,
     mut commands: Commands,
 ) {
-    for event in interaction_started_reader.read() {
-        if let Ok((waiting, mut agent_queue, maybe_interacting)) = query.get_mut(event.target) {
+    if let Ok((waiting, mut agent_queue, maybe_interacting)) = query.get_mut(trigger.target) {
+        add_log_writer.send(AddLogEntry::new(
+            trigger.target,
+            format!(
+                "Received InteractionStarted event Id: {}. WaitingInteraction ID {}",
+                trigger.item.id, waiting.id
+            )
+            .as_str(),
+        ));
+
+        if waiting.id != trigger.item.id {
+            commands.trigger(InteractionTimedOut {
+                id: trigger.item.id,
+            });
+
+            return;
+        }
+
+        agent_queue.interaction_ready(trigger.item.clone());
+
+        if maybe_interacting.is_none() {
             add_log_writer.send(AddLogEntry::new(
-                event.target,
+                trigger.target,
                 format!(
-                    "Received InteractionStarted event Id: {}. WaitingInteraction ID {}",
-                    event.item.id, waiting.id
+                    "Triggered SourceStartInteraction event for interaction: {}",
+                    trigger.item.id
                 )
                 .as_str(),
             ));
 
-            if waiting.id != event.item.id {
-                commands.trigger(InteractionTimedOut { id: event.item.id });
-                continue;
-            }
-
-            agent_queue.interaction_ready(event.item.clone());
-
-            if maybe_interacting.is_none() {
-                add_log_writer.send(AddLogEntry::new(
-                    event.target,
-                    format!(
-                        "Triggered SourceStartInteraction event for interaction: {}",
-                        event.item.id
-                    )
-                    .as_str(),
-                ));
-
-                commands.trigger(SourceStartInteraction {
-                    target: event.target,
-                });
-            } else {
-                add_log_writer.send(AddLogEntry::new(
-                    event.target,
-                    format!("Currently interacting {}", maybe_interacting.unwrap().id).as_str(),
-                ));
-            }
+            commands.trigger(SourceStartInteraction {
+                target: trigger.target,
+            });
+        } else {
+            add_log_writer.send(AddLogEntry::new(
+                trigger.target,
+                format!("Currently interacting {}", maybe_interacting.unwrap().id).as_str(),
+            ));
         }
     }
 }

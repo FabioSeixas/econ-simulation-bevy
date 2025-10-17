@@ -131,18 +131,22 @@ pub fn handle_offer_agreed_system(
 }
 
 pub fn handle_trade_finalized(
-    mut target_query: Query<(&TradeNegotiation, Option<&mut BuyTask>), With<Interacting>>,
+    mut target_query: Query<(&TradeNegotiation, Option<&mut BuyTask>, &Interacting)>,
     mut trade_finalized_reader: EventReader<TradeFinalized>,
     mut commands: Commands,
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
     for event in trade_finalized_reader.read() {
-        if let Ok((trade, buy_task)) = target_query.get_mut(event.target) {
+        if let Ok((trade, buy_task, interacting)) = target_query.get_mut(event.target) {
             if trade.role == TradeRole::Buyer {
                 if event.success {
                     add_log_writer.send(AddLogEntry::new(
                         event.target,
-                        format!("Trade with {} finished with success", trade.partner).as_str(),
+                        format!(
+                            "Trade with {} finished with success. Interaction ID: {}",
+                            trade.partner, interacting.id
+                        )
+                        .as_str(),
                     ));
                     commands
                         .entity(event.target)
@@ -151,7 +155,11 @@ pub fn handle_trade_finalized(
                 } else {
                     add_log_writer.send(AddLogEntry::new(
                         event.target,
-                        format!("Trade with {} finished with FAILURE", trade.partner).as_str(),
+                        format!(
+                            "Trade with {} finished with FAILURE. Interaction ID: {}",
+                            trade.partner, interacting.id
+                        )
+                        .as_str(),
                     ));
 
                     if let Some(mut task) = buy_task {
@@ -163,7 +171,10 @@ pub fn handle_trade_finalized(
                         .remove::<(TradeInteraction, Buying)>();
                 }
             } else {
-                let description = format!("Trade with {} finished", trade.partner);
+                let description = format!(
+                    "Trade with {} finished. Interaction ID: {}",
+                    trade.partner, interacting.id
+                );
                 add_log_writer.send(AddLogEntry::new(event.target, description.as_str()));
                 commands.entity(event.target).remove::<TradeInteraction>();
             }

@@ -2,7 +2,7 @@ use bevy_egui::{egui, EguiContexts};
 
 use bevy::{
     color::{palettes::css::YELLOW, Color},
-    core::Name,
+    core::{FrameCount, Name},
     ecs::{
         entity::Entity,
         observer::Trigger,
@@ -146,6 +146,7 @@ pub fn agent_ui_panel_system(
         Option<&TradeNegotiation>,
         Option<&KnowledgeSharingInteraction>,
     )>,
+    frame_count: Res<FrameCount>,
 ) {
     // Check if an agent is selected. If not, we don't draw anything.
     let Some((selected_entity, _)) = selected_agent.entity else {
@@ -163,6 +164,8 @@ pub fn agent_ui_panel_system(
         .show(contexts.ctx_mut(), |ui| {
             ui.heading(format!("Inspector: {}", name.as_str()));
             ui.separator();
+
+            ui.label(format!("Frame: {}", frame_count.0));
 
             ui.label("CURRENT MARKERS:");
             if let Ok((idle, consuming, selling, buying, walking)) =
@@ -227,6 +230,13 @@ pub fn agent_ui_panel_system(
                         v.id,
                         v.get_resting_duration()
                     ));
+                    if ui.button("Select partner").clicked() {
+                        if v.target == selected_entity {
+                            commands.trigger(ChangeSelectedEntity { target: v.source });
+                        } else {
+                            commands.trigger(ChangeSelectedEntity { target: v.target });
+                        }
+                    };
                 }
 
                 if let Some(w) = waiting_interaction {
@@ -249,8 +259,11 @@ pub fn agent_ui_panel_system(
             ui.label("CURRENT Interaction Data:");
             if let Ok((trade, knowledge_interaction)) = interaction_data_query.get(selected_entity)
             {
-                if let Some(_) = trade {
+                if let Some(v) = trade {
                     ui.label("TradeNegotiation");
+                    if ui.button("Select partner").clicked() {
+                        commands.trigger(ChangeSelectedEntity { target: v.partner });
+                    };
                 }
 
                 if let Some(v) = knowledge_interaction {

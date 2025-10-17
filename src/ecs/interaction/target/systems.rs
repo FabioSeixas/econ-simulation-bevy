@@ -14,7 +14,6 @@ pub fn check_agent_interaction_queue_system(
     mut query: Query<(Entity, &mut AgentInteractionQueue), Without<Interacting>>,
     mut commands: Commands,
     mut add_log_writer: EventWriter<AddLogEntry>,
-    mut interaction_started_writer: EventWriter<InteractionStarted>,
 ) {
     for (target_entity, mut agent_interation_queue) in &mut query {
         if !agent_interation_queue.is_empty() {
@@ -46,8 +45,8 @@ pub fn check_agent_interaction_queue_system(
                         add_log_writer.send(AddLogEntry::new(
                             target_entity,
                             format!(
-                                "Received Trade Interaction with {}",
-                                trade_negotiation.partner
+                                "Received Trade Interaction {}",
+                                interaction_item.id
                             )
                             .as_str(),
                         ));
@@ -65,7 +64,7 @@ pub fn check_agent_interaction_queue_system(
                 };
 
                 if let Some(source_entity) = maybe_trigger_for_entity {
-                    interaction_started_writer.send(InteractionStarted {
+                    commands.trigger(InteractionStarted {
                         item: interaction_item,
                         target: source_entity,
                     });

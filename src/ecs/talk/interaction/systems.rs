@@ -15,11 +15,11 @@ use crate::ecs::{
 };
 
 pub fn handle_knowlegde_share_requested_system(
-    query: Query<(Entity, &KnowledgeSharingInteraction, &Interacting)>,
+    mut query: Query<(Entity, &KnowledgeSharingInteraction, &mut Interacting)>,
     mut start_talk_writer: EventWriter<StartTalkEvent>,
     mut add_log_writer: EventWriter<AddLogEntry>,
 ) {
-    for (entity, knowledge_sharing, entity_interacting) in &query {
+    for (entity, knowledge_sharing, mut entity_interacting) in &mut query {
         if entity == knowledge_sharing.target && entity_interacting.is_ready() {
             add_log_writer.send(AddLogEntry::new(
                 entity,
@@ -31,7 +31,11 @@ pub fn handle_knowlegde_share_requested_system(
             ));
             start_talk_writer.send(StartTalkEvent {
                 target: knowledge_sharing.target,
+                source: knowledge_sharing.source,
+                interaction_id: entity_interacting.id,
             });
+
+            entity_interacting.set_started();
         }
     }
 }
@@ -56,9 +60,7 @@ pub fn handle_knowlegde_share_started_system(
                 format!("Start talking. ID: {}", interacting.id).as_str(),
             ));
 
-            if let Ok((source_entity, source_agent_knowledge)) =
-                source_query.get(knowledge_sharing.source)
-            {
+            if let Ok((source_entity, source_agent_knowledge)) = source_query.get(event.source) {
                 let target_known_sellers =
                     target_agent_knowledge.get_sellers_of(&knowledge_sharing.seller_of);
                 let source_known_sellers: Vec<Entity> = source_agent_knowledge
@@ -85,17 +87,17 @@ pub fn handle_knowlegde_share_started_system(
                 }
 
                 if nothing_to_share {
-                    share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
-                        interaction_id: interacting.id,
-                        target: source_entity,
-                        success: false,
-                        should_trigger_feedback: true,
-                    });
+                    // share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
+                    //     interaction_id: interacting.id,
+                    //     target: event.target,
+                    //     success: false,
+                    //     should_trigger_feedback: true,
+                    // });
                     share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
                         interaction_id: interacting.id,
                         target: event.target,
+                        source: source_entity,
                         success: false,
-                        should_trigger_feedback: false,
                     });
                 }
             } else {
@@ -134,19 +136,20 @@ pub fn handle_knowlegde_shared_system(
 
             source_agent_knowledge.add(event.knowledge_id);
 
-            share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
-                interaction_id: interacting.id,
-                target: event.source,
-                success: true,
-                should_trigger_feedback: true,
-            });
+            // share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
+            //     interaction_id: interacting.id,
+            //     target: event.source,
+            //     source: event.source,
+            //     success: true,
+            //     should_trigger_feedback: true,
+            // });
         }
 
         share_knowledge_finalized_writer.send(ShareKnowledgeFinalizedEvent {
             interaction_id: event.interaction_id,
             target: event.target,
+            source: event.source,
             success: true,
-            should_trigger_feedback: false,
         });
     }
 }
@@ -167,20 +170,34 @@ pub fn share_knowledge_finalized_system(
             .as_str(),
         ));
 
+        add_log_writer.send(AddLogEntry::new(
+            event.source,
+            format!(
+                "Finishing Interaction {} - knowledge sharing with {}",
+                event.interaction_id,
+                if event.success { "SUCCESS" } else { "FAILURE" }
+            )
+            .as_str(),
+        ));
+
         commands
             .entity(event.target)
             .remove::<(Interacting, KnowledgeSharingInteraction)>();
 
-        if event.should_trigger_feedback {
-            if event.success {
-                commands.trigger(TalkFinishedWithSuccess {
-                    target: event.target,
-                });
-            } else {
-                commands.trigger(TalkFinishedWithFailure {
-                    target: event.target,
-                });
-            }
+        commands
+            .entity(event.source)
+            .remove::<(Interacting, KnowledgeSharingInteraction)>();
+
+        if event.success {
+            commands.trigger(TalkFinishedWithSuccess {
+                source: event.source,
+            });
+        } else {
+            commands.trigger(TalkFinishedWithFailure {
+                target: event.target,
+                source: event.source,
+                interaction_id: event.interaction_id,
+            });
         }
     }
 }
@@ -204,7 +221,11 @@ pub fn handle_interaction_timed_out(
             commands
                 .entity(entity)
                 .remove::<(Interacting, KnowledgeSharingInteraction)>()
-                .trigger(TalkFinishedWithFailure { target: entity });
+                .trigger(TalkFinishedWithFailure {
+                    target: interacting.target,
+                    source: interacting.source,
+                    interaction_id: interacting.id,
+                });
         }
     }
 }

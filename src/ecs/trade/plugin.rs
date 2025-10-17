@@ -20,6 +20,7 @@ impl Plugin for TradePlugin {
                     handle_offer_agreed_system,
                     handle_trade_finalized,
                 )
+                    .chain()
                     .run_if(in_state(GameState::Running)),
             );
     }
