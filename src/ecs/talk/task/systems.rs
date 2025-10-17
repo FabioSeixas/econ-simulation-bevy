@@ -20,18 +20,20 @@ pub fn handle_added_talk_task(
             continue;
         }
 
-        add_log_writer.send(AddLogEntry::new(
-            source_entity,
-            format!("TalkTask -> searching an Agent to ask").as_str(),
-        ));
-
         if talk_task.tried.len() > 3 {
             // although using TalkFinishedWithSuccess here,
             // this is a failure
             commands.trigger(TalkFinishedWithSuccess {
                 target: source_entity
             });
+
+            continue;
         }
+
+        add_log_writer.send(AddLogEntry::new(
+            source_entity,
+            format!("TalkTask -> searching an Agent to ask").as_str(),
+        ));
 
         let mut best: Option<(Entity, f32)> = None;
         for (entity, target_transform, _, _) in &target_agent_query {

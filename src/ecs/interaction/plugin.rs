@@ -28,12 +28,7 @@ impl Plugin for BaseInteractionPlugin {
             )
             .add_systems(
                 PreUpdate,
-                (
-                    check_agent_interaction_queue_system,
-                    receive_interaction_started_system,
-                )
-                    .chain()
-                    .run_if(in_state(GameState::Running)),
+                (check_agent_interaction_queue_system,).run_if(in_state(GameState::Running)),
             )
             .add_systems(
                 Update,
@@ -42,6 +37,10 @@ impl Plugin for BaseInteractionPlugin {
                     handle_interaction_starting_for_target_system,
                 )
                     .run_if(in_state(GameState::Running)),
+            )
+            .add_systems(
+                Last,
+                (receive_interaction_started_system).run_if(in_state(GameState::Running)),
             );
     }
 }

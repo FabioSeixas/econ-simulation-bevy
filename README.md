@@ -6,6 +6,13 @@ Playing around with Bevy
 
 This is an experiment making a medieval/fantasy economy simulation.
 
+### Imediate next steps
+
+- [ ] Change (all?) interactions event writing (EventWriter) to event triggering (using Commands.trigger()), 
+so event handling happens at the exact moment and we do not depend on systems schedulle. 
+Hope we can decrease inconsistencies with this.
+- [ ] Confirm we do not have more freeze agents (buy task and waiting interaction for ever, for example)
+
 ### On the Horizon
 
 - [ ] Collisions
