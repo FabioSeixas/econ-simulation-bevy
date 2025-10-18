@@ -22,3 +22,34 @@ Hope we can decrease inconsistencies with this.
 - [ ] Orders -> Someone order an iron sword from the Blacksmith, order a soup from the Cook
 
 
+Changing to use Behavior Trees:
+
+```
+? Selector (Acquire Item)
+|
++--> -> Sequence (Attempt to Buy from a Known Seller)
+|    |
+|    +--> ? HasKnownSellersFor(item)? (Condition)
+|    |
+|    +--> ? Selector (Try Each Known Seller)
+|         |
+|         +--- *For each seller in knowledge...*
+|         |
+|         +--> -> Sequence (Go to Seller and Buy)
+|              |
+|              +--> ? Selector (Ensure Proximity to Seller)
+|              |    |
+|              |    +--> ? IsNear(seller)? (Condition)
+|              |    |
+|              |    +--> WalkTo(seller) (Action)
+|              |
+|              +--> InitiateBuyInteraction(seller) (Action)
+|
++--> -> Sequence (Fallback: Find a Seller)
+     |
+     +--> FindSeller(item) (Action: e.g., start TalkTask)
+     |
+     +--> Succeed (Action: Ensures the whole tree doesn't stay in a failed state)
+```
+
+
